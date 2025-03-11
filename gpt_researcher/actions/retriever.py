@@ -60,6 +60,10 @@ def get_retriever(retriever):
             from gpt_researcher.retrievers import PubMedCentralSearch
 
             retriever = PubMedCentralSearch
+        case "pubmed_dian":
+            from gpt_researcher.retrievers import PubmedDianSearch
+
+            retriever = PubmedDianSearch
         case "custom":
             from gpt_researcher.retrievers import CustomRetriever
 

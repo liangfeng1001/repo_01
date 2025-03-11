@@ -4,6 +4,7 @@ from .custom.custom import CustomRetriever
 from .duckduckgo.duckduckgo import Duckduckgo
 from .google.google import GoogleSearch
 from .pubmed_central.pubmed_central import PubMedCentralSearch
+from .pubmed_dian.pubmed_dian import PubmedDianSearch
 from .searx.searx import SearxSearch
 from .semantic_scholar.semantic_scholar import SemanticScholarSearch
 from .searchapi.searchapi import SearchApiSearch
@@ -25,5 +26,6 @@ __all__ = [
     "ArxivSearch",
     "SemanticScholarSearch",
     "PubMedCentralSearch",
+    "PubmedDianSearch",
     "ExaSearch"
 ]
