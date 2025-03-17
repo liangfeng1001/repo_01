@@ -130,7 +130,7 @@ class GenericLLMProvider:
             _check_pkg("langchain_openai")
             from langchain_openai import ChatOpenAI
 
-            llm = ChatOpenAI(openai_api_base='https://infer-modelarts-cn-southwest-2.modelarts-infer.com/v1/infers/952e4f88-ef93-4398-ae8d-af37f63f0d8e/v1/chat/completions',
+            llm = ChatOpenAI(openai_api_base='https://infer-modelarts-cn-southwest-2.modelarts-infer.com/v1/infers/952e4f88-ef93-4398-ae8d-af37f63f0d8e/v1/',
                      openai_api_key="cKf5GPVxUVlhnFwQO-2ooeCWmnH0IvZ4DtVTEcSIPcHjt-2cXguFo3j7Sj13Vo29gZ-tYjIrcci8EANOCEO2yg",
                      **kwargs
                 )
@@ -169,8 +169,8 @@ class GenericLLMProvider:
 
         if not stream:
             # Getting output from the model chain using ainvoke for asynchronous invoking
-            url = "https://infer-modelarts-cn-southwest-2.modelarts-infer.com/v1/infers/952e4f88-ef93-4398-ae8d-af37f63f0d8e/v1/chat/completions"
-            api_key = "cKf5GPVxUVlhnFwQO-2ooeCWmnH0IvZ4DtVTEcSIPcHjt-2cXguFo3j7Sj13Vo29gZ-tYjIrcci8EANOCEO2yg"  # 把<your_apiKey>替换成已获取的API Key。
+            url = "http://123.57.10.64:8289/v1/chat/completions"
+            api_key = ""  # 把<your_apiKey>替换成已获取的API Key。
 
             # Send request.
             headers = {

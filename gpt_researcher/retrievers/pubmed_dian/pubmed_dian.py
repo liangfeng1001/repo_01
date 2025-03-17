@@ -91,6 +91,8 @@ class PubmedDianSearch():
                     for result in results:
                         if results_processed >= max_results:
                             break
+                        if not "AB" in result or not "TI" in result:
+                            continue
                         search_result = {
                             "title": result["TI"],
                             "href": result["LINK"],
