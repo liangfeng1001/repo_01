@@ -1,6 +1,7 @@
 import asyncio
 import random
 import json
+import re
 from typing import Dict, Optional
 import logging
 import os
@@ -284,9 +285,13 @@ class ResearchConductor:
             content = await self.researcher.context_manager.get_similar_content_by_query(sub_query, scraped_data)
             self.logger.info(f"Content found for sub-query: {len(str(content)) if content else 0} chars")
 
+            # # content 进行分类
+            result = await self.classify_content(content)
+
             if content and self.researcher.verbose:
                 await stream_output(
-                    "logs", "subquery_context_window", f"📃 {content}", self.researcher.websocket
+                    # "logs", "subquery_context_window", f"📃 {content}", self.researcher.websocket
+                    "logs", "subquery_context_window", f"📃 {result}", self.researcher.websocket
                 )
             elif self.researcher.verbose:
                 await stream_output(
@@ -338,6 +343,106 @@ class ResearchConductor:
             )
         return content
 
+
+    # from typing import Dict, List
+
+    # async def classify_content(self, content: str) -> Dict[str, List[Dict]]:
+    #     """
+    #     异步分类内容到不同类别（arxiv/tavily）
+        
+    #     Args:
+    #         content: 包含多个内容块的原始文本
+            
+    #     Returns:
+    #         分类后的字典结构 {
+    #             "arxiv": [包含arxiv的块],
+    #             "tavily": [其他块]
+    #         }
+    #     """
+    #     # 使用正则表达式分割内容块
+    #     blocks = re.split(r'\n(?=Source: https?://)', content.strip())
+        
+    #     classified = {"arxiv": [], "tavily": []}
+        
+    #     for block in blocks:
+    #         if not block.strip():
+    #             continue
+                
+    #         # 解析块内容
+    #         source_match = re.search(r'^Source: (https?://[^\s]+)', block, re.M)
+    #         title_match = re.search(r'Title: (.+)', block)
+    #         content_match = re.search(r'Content: (.+)', block, re.DOTALL)
+            
+    #         if not all([source_match, title_match, content_match]):
+    #             continue
+                
+    #         parsed_block = {
+    #             "source": source_match.group(1),
+    #             "title": title_match.group(1).strip().replace('\n', ' '),
+    #             "content": content_match.group(1).strip().replace('\n', ' ')
+    #         }
+            
+    #         # 分类逻辑
+    #         if 'arxiv' in parsed_block['source'].lower():
+    #             classified['arxiv'].append(parsed_block)
+    #         else:
+    #             classified['tavily'].append(parsed_block)
+                
+    #     return classified
+    from typing import Dict, List
+
+    async def classify_content(self, content: str) -> Dict[str, List[Dict]]:
+        """
+        异步分类内容到不同类别（arxiv/tavily）
+    
+         Args:
+            content: 包含多个内容块的原始文本
+        
+        Returns:
+        分类后的字典结构 {
+            "arxiv": [包含arxiv的块],
+            "tavily": [其他块]
+        }
+        """
+        # 使用正则表达式分割内容块
+        blocks = re.split(r'\n(?=Source: https?://)', content.strip())
+        
+        classified = {"arxiv": [], "pubmed": [], "tavily": []}
+        # classified = {"arxiv": [], "tavily": []}
+
+        
+        for block in blocks:
+            if not block.strip():
+                continue
+                
+            # 解析块内容
+            source_match = re.search(r'^Source: (https?://[^\s]+)', block, re.M)
+            title_match = re.search(r'Title: (.+)', block)
+            content_match = re.search(r'Content: (.+)', block, re.DOTALL)
+            
+            if not all([source_match, title_match, content_match]):
+                continue
+                
+            parsed_block = {
+                "source": source_match.group(1), 
+                "title": title_match.group(1).strip().replace('\n', ''),
+                "content": content_match.group(1).strip().replace('\n', ' ')
+            }
+
+            # 分类逻辑
+            if 'arxiv' in parsed_block['source'].lower():
+                classified['arxiv'].append(parsed_block)
+            elif 'ncbi' in parsed_block['source'].lower():
+                classified['pubmed'].append(parsed_block)
+            else:
+                classified['tavily'].append(parsed_block)
+
+            # 将没有内容的分类进行剔除，不在输出展示
+            classified = {key: value for key, value in classified.items() if value}
+
+            json_block = json.dumps(classified, ensure_ascii=False)           
+        return json_block
+ 
     async def _get_new_urls(self, url_set_input):
         """Gets the new urls from the given url set.
         Args: url_set_input (set[str]): The url set to get the new urls from

@@ -55,7 +55,7 @@ DEFAULT_CONFIG: BaseConfig = {
     "AGENT_ROLE": None,
     "SCRAPER": "bs",
     "MAX_SUBTOPICS": 3,
-    "LANGUAGE": "english",
+    "LANGUAGE": "english",      # 可以将生成的报告设置为：Chinese
     "REPORT_SOURCE": "web",
     "DOC_PATH": "./my-docs",
     # Deep research specific settings

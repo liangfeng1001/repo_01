@@ -44,6 +44,10 @@ def get_retriever(retriever):
             from gpt_researcher.retrievers import ArxivSearch
 
             retriever = ArxivSearch
+        case "bioRxiv":
+            from gpt_researcher.retrievers import bioRxivSearch
+
+            retriever = bioRxivSearch
         case "tavily":
             from gpt_researcher.retrievers import TavilySearch
 
