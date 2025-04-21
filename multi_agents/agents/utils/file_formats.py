@@ -3,6 +3,13 @@ import urllib
 import uuid
 import mistune
 import os
+from pathlib import Path
+
+# 获取项目根目录（当前目录）
+BASE_DIR = Path.cwd()
+
+# 使用相对路径
+css_path = os.path.join(BASE_DIR, "frontend", "pdf_styles.css")
 
 async def write_to_file(filename: str, text: str) -> None:
     """Asynchronously write text to a file in UTF-8 encoding.
@@ -47,10 +54,6 @@ async def write_md_to_pdf(text: str, path: str) -> str:
     file_path = f"{path}/{task}.pdf"
 
     try:
-        # Get the directory of the current file
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        css_path = os.path.join(current_dir, "pdf_styles.css")
-        
         # Moved imports to inner function to avoid known import errors with gobject-2.0
         from md2pdf.core import md2pdf
         md2pdf(file_path,

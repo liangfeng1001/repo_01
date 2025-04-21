@@ -1,6 +1,7 @@
 import json
 import os
 from typing import Dict, List
+from pathlib import Path
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, File, UploadFile, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,7 +17,6 @@ from backend.server.server_utils import (
 )
 
 
-from gpt_researcher.utils.logging_config import setup_research_logging
 
 import logging
 
@@ -66,10 +66,13 @@ class ConfigRequest(BaseModel):
 # App initialization
 app = FastAPI()
 
+# 获取项目根目录（当前目录）
+BASE_DIR = Path.cwd()
+
 # Static files and templates
-app.mount("/site", StaticFiles(directory="F:/dian/dian_123/gpt_researcher/frontend"), name="site")
-app.mount("/static", StaticFiles(directory="F:/dian/dian_123/gpt_researcher/frontend/static"), name="static")
-templates = Jinja2Templates(directory="F:/dian/dian_123/gpt_researcher/frontend")
+app.mount("/site", StaticFiles(directory=os.path.join(BASE_DIR, "frontend")), name="site")
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "frontend", "static")), name="static")
+templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "frontend"))
 
 # WebSocket manager
 manager = WebSocketManager()

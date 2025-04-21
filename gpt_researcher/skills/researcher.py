@@ -2,7 +2,7 @@ import asyncio
 import random
 import json
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any, AsyncGenerator
 import logging
 import os
 from ..actions.utils import stream_output
@@ -10,6 +10,11 @@ from ..actions.query_processing import plan_research_outline, get_search_results
 from ..document import DocumentLoader, OnlineDocumentLoader, LangChainDocumentLoader
 from ..utils.enum import ReportSource, ReportType, Tone
 from ..utils.logging_config import get_json_handler, get_research_logger
+from pathlib import Path
+import markdown
+from weasyprint import HTML
+import openai
+
 
 
 class ResearchConductor:
@@ -19,6 +24,7 @@ class ResearchConductor:
         self.researcher = researcher
         self.logger = logging.getLogger('research')
         self.json_handler = get_json_handler()
+
 
     async def plan_research(self, query, query_domains=None):
         self.logger.info(f"Planning research for query: {query}")
@@ -282,31 +288,42 @@ class ResearchConductor:
                 scraped_data = await self._scrape_data_by_urls(sub_query, query_domains)
                 self.logger.info(f"Scraped data size: {len(scraped_data)}")
 
-            content = await self.researcher.context_manager.get_similar_content_by_query(sub_query, scraped_data)
-            self.logger.info(f"Content found for sub-query: {len(str(content)) if content else 0} chars")
-
-            # # content 进行分类
-            result = await self.classify_content(content)
-
-            if content and self.researcher.verbose:
-                await stream_output(
-                    # "logs", "subquery_context_window", f"📃 {content}", self.researcher.websocket
-                    "logs", "subquery_context_window", f"📃 {result}", self.researcher.websocket
-                )
-            elif self.researcher.verbose:
-                await stream_output(
-                    "logs",
-                    "subquery_context_not_found",
-                    f"🤷 No content found for '{sub_query}'...",
-                    self.researcher.websocket,
-                )
-            if content:
-                if self.json_handler:
-                    self.json_handler.log_event("content_found", {
-                        "sub_query": sub_query,
-                        "content_size": len(content)
-                    })
-            return content
+            max_retries = 3
+            retry_delay = 60  # 60秒等待时间
+            
+            for attempt in range(max_retries):
+                try:
+                    content = await self.researcher.context_manager.get_similar_content_by_query(sub_query, scraped_data)
+                    self.logger.info(f"Content found for sub-query: {len(str(content)) if content else 0} chars")
+                    
+                    # content 进行分类
+                    result = await self.classify_content(content)
+                    
+                    if content and self.researcher.verbose:
+                        await stream_output(
+                            "logs", "subquery_context_window", f"📃 {result}", self.researcher.websocket
+                        )
+                    elif self.researcher.verbose:
+                        await stream_output(
+                            "logs",
+                            "subquery_context_not_found",
+                            f"🤷 No content found for '{sub_query}'...",
+                            self.researcher.websocket,
+                        )
+                    if content:
+                        if self.json_handler:
+                            self.json_handler.log_event("content_found", {
+                                "sub_query": sub_query,
+                                "content_size": len(content)
+                            })
+                    return content
+                except openai.RateLimitError as e:
+                    if attempt < max_retries - 1:
+                        self.logger.warning(f"Rate limit exceeded, retrying in {retry_delay} seconds...")
+                        await asyncio.sleep(retry_delay)
+                        retry_delay *= 2  # 指数退避
+                    else:
+                        raise e
         except Exception as e:
             self.logger.error(f"Error processing sub-query {sub_query}: {e}", exc_info=True)
             return ""
@@ -343,54 +360,6 @@ class ResearchConductor:
             )
         return content
 
-
-    # from typing import Dict, List
-
-    # async def classify_content(self, content: str) -> Dict[str, List[Dict]]:
-    #     """
-    #     异步分类内容到不同类别（arxiv/tavily）
-        
-    #     Args:
-    #         content: 包含多个内容块的原始文本
-            
-    #     Returns:
-    #         分类后的字典结构 {
-    #             "arxiv": [包含arxiv的块],
-    #             "tavily": [其他块]
-    #         }
-    #     """
-    #     # 使用正则表达式分割内容块
-    #     blocks = re.split(r'\n(?=Source: https?://)', content.strip())
-        
-    #     classified = {"arxiv": [], "tavily": []}
-        
-    #     for block in blocks:
-    #         if not block.strip():
-    #             continue
-                
-    #         # 解析块内容
-    #         source_match = re.search(r'^Source: (https?://[^\s]+)', block, re.M)
-    #         title_match = re.search(r'Title: (.+)', block)
-    #         content_match = re.search(r'Content: (.+)', block, re.DOTALL)
-            
-    #         if not all([source_match, title_match, content_match]):
-    #             continue
-                
-    #         parsed_block = {
-    #             "source": source_match.group(1),
-    #             "title": title_match.group(1).strip().replace('\n', ' '),
-    #             "content": content_match.group(1).strip().replace('\n', ' ')
-    #         }
-            
-    #         # 分类逻辑
-    #         if 'arxiv' in parsed_block['source'].lower():
-    #             classified['arxiv'].append(parsed_block)
-    #         else:
-    #             classified['tavily'].append(parsed_block)
-                
-    #     return classified
-    from typing import Dict, List
-
     async def classify_content(self, content: str) -> Dict[str, List[Dict]]:
         """
         异步分类内容到不同类别（arxiv/tavily）
@@ -407,9 +376,7 @@ class ResearchConductor:
         # 使用正则表达式分割内容块
         blocks = re.split(r'\n(?=Source: https?://)', content.strip())
         
-        classified = {"arxiv": [], "pubmed": [], "tavily": []}
-        # classified = {"arxiv": [], "tavily": []}
-
+        classified = {"arxiv": [], "pubmed": [], "tavily": []}  # 初始化所有可能的类别
         
         for block in blocks:
             if not block.strip():
@@ -437,12 +404,10 @@ class ResearchConductor:
             else:
                 classified['tavily'].append(parsed_block)
 
-            # 将没有内容的分类进行剔除，不在输出展示
-            classified = {key: value for key, value in classified.items() if value}
+        # 将没有内容的分类进行剔除，不在输出展示
+        classified = {key: value for key, value in classified.items() if value}
+        return classified
 
-            json_block = json.dumps(classified, ensure_ascii=False)           
-        return json_block
- 
     async def _get_new_urls(self, url_set_input):
         """Gets the new urls from the given url set.
         Args: url_set_input (set[str]): The url set to get the new urls from

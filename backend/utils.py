@@ -1,6 +1,14 @@
 import aiofiles
 import urllib
 import mistune
+from pathlib import Path
+import os
+
+# 获取项目根目录（当前目录）
+BASE_DIR = Path.cwd()
+
+# 使用相对路径
+css_file_path = os.path.join(BASE_DIR, "frontend", "pdf_styles.css")
 
 async def write_to_file(filename: str, text: str) -> None:
     """Asynchronously write text to a file in UTF-8 encoding.
@@ -47,9 +55,7 @@ async def write_md_to_pdf(text: str, filename: str = "") -> str:
         from md2pdf.core import md2pdf
         md2pdf(file_path,
                md_content=text,
-               # md_file_path=f"{file_path}.md",
-            #    css_file_path="./frontend/pdf_styles.css",
-               css_file_path="F:/dian/dian_123/gpt_researcher/frontend/pdf_styles.css",
+               css_file_path=css_file_path,
                base_url=None)
         print(f"Report written to {file_path}")
     except Exception as e:

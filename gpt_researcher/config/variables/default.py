@@ -36,9 +36,9 @@ DEFAULT_CONFIG: BaseConfig = {
     "RETRIEVER": "tavily",
     "EMBEDDING": "azure_openai:text-embedding-ada-002",
     "SIMILARITY_THRESHOLD": 0.42,
-    "FAST_LLM": "deepseek_hw:r1",
-    "SMART_LLM": "deepseek_hw:r1", # Has support for long responses (2k+ words).
-    "STRATEGIC_LLM": "deepseek_hw:r1", # Can be used with gpt-o1 or gpt-o3
+    "FAST_LLM": "qwen_local:./qwen2.5-7B",
+    "SMART_LLM": "qwen_local:./qwen2.5-7B",
+    "STRATEGIC_LLM": "qwen_local:./qwen2.5-7B",
     "FAST_TOKEN_LIMIT": 2000,
     "SMART_TOKEN_LIMIT": 4000,
     "STRATEGIC_TOKEN_LIMIT": 4000,

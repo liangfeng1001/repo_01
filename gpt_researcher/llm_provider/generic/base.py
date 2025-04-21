@@ -2,6 +2,8 @@ import importlib
 from typing import Any
 from colorama import Fore, Style, init
 import os
+import requests
+import json
 
 _SUPPORTED_PROVIDERS = {
     "openai",
@@ -22,6 +24,7 @@ _SUPPORTED_PROVIDERS = {
     "deepseek",
     "deepseek_hw",
     "litellm",
+    "qwen_local",
 }
 
 
@@ -145,6 +148,17 @@ class GenericLLMProvider:
 
             kwargs.pop("model", None) # Use env GIGACHAT_MODEL=GigaChat-Max
             llm = GigaChat(**kwargs)
+        elif provider == "qwen_local":
+            _check_pkg("langchain_openai")
+            from langchain_openai import ChatOpenAI
+            
+                
+            llm = ChatOpenAI(
+                openai_api_base="http://39.105.44.103:8294/v1/", 
+                openai_api_key="dummy_key",
+                **kwargs
+            )
+    
         else:
             supported = ", ".join(_SUPPORTED_PROVIDERS)
             raise ValueError(
@@ -165,37 +179,37 @@ class GenericLLMProvider:
     #         return await self.stream_response(messages, websocket)
 
     async def get_chat_response(self, messages, stream, websocket=None):
-        import requests, json
-
         if not stream:
-            # Getting output from the model chain using ainvoke for asynchronous invoking
-            url = "http://123.57.10.64:8289/v1/chat/completions"
-            api_key = ""  # 把<your_apiKey>替换成已获取的API Key。
+            url = "http://39.105.44.103:8294/v1/chat/completions"
+            api_key = ""
 
-            # Send request.
             headers = {
                 'Content-Type': 'application/json',
                 'Authorization': f'Bearer {api_key}'
             }
             data = {
-                "model": "DeepSeek-R1",  # 调用时的模型名称。
-                "max_tokens": 1024,  # 最大输出token数。
-                "messages": [
-                    {"role": "system", "content": "You are a helpful assistant."}
-                    # {"role": "user", "content": "铜绿假单胞菌的耐药基因有哪些？请整理相关文献，包括arxiv和biorxiv上的文献，给出文章title和journa信息，以及发表时间，以表格的形式给出。"}
-                ],
-                # 是否开启流式推理，默认为False,表示不开启流式推理。
+                "model": "./qwen2.5-7B",
+                "max_tokens": 1024,
+                "messages": messages,
                 "stream": False,
-                # 在流式输出时是否展示使用的token数目。只有当stream为True时该参数才会生效。
-                # "stream_options": {"include_usage": True},
-                # 控制采样随机性的浮点数，值较低时模型更具确定性，值较高时模型更具创造性。"0"表示贪婪取样。默认为1.0。
                 "temperature": 1.0
             }
-            data['messages'] = messages
-            response = requests.post(url, headers=headers, data=json.dumps(data), verify=False)
-            content = response.json()
-            output = content['choices'][0]['message']['content']
-            return output
+            
+            try:
+                response = requests.post(url, headers=headers, data=json.dumps(data), verify=False)
+                
+                if response.status_code != 200:
+                    raise Exception(f"请求失败: {response.status_code} - {response.text}")
+                
+                content = response.json()
+                if 'choices' not in content or not content['choices']:
+                    raise Exception("响应格式错误: 缺少 choices 字段")
+                
+                return content['choices'][0]['message']['content']
+                
+            except Exception as e:
+                print(f"[ERROR] 请求失败: {str(e)}")
+                raise
 
         else:
             return await self.stream_response(messages, websocket)
