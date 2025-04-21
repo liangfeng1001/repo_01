@@ -29,5 +29,6 @@ __all__ = [
     "PubMedCentralSearch",
     "PubmedDianSearch",
     "ExaSearch",
-    "bioRxivSearch"
+    "bioRxivSearch",
+    "PubmedDianSearch"
 ]

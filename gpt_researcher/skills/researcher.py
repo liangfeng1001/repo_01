@@ -288,45 +288,33 @@ class ResearchConductor:
                 scraped_data = await self._scrape_data_by_urls(sub_query, query_domains)
                 self.logger.info(f"Scraped data size: {len(scraped_data)}")
 
-            max_retries = 3
-            retry_delay = 60  # 60秒等待时间
-            
-            for attempt in range(max_retries):
-                try:
-                    content = await self.researcher.context_manager.get_similar_content_by_query(sub_query, scraped_data)
-                    self.logger.info(f"Content found for sub-query: {len(str(content)) if content else 0} chars")
-                    
-                    # content 进行分类
-                    result = await self.classify_content(content)
-                    
-                    if content and self.researcher.verbose:
-                        await stream_output(
-                            "logs", "subquery_context_window", f"📃 {result}", self.researcher.websocket
-                        )
-                    elif self.researcher.verbose:
-                        await stream_output(
-                            "logs",
-                            "subquery_context_not_found",
-                            f"🤷 No content found for '{sub_query}'...",
-                            self.researcher.websocket,
-                        )
-                    if content:
-                        if self.json_handler:
-                            self.json_handler.log_event("content_found", {
-                                "sub_query": sub_query,
-                                "content_size": len(content)
-                            })
-                    return content
-                except openai.RateLimitError as e:
-                    if attempt < max_retries - 1:
-                        self.logger.warning(f"Rate limit exceeded, retrying in {retry_delay} seconds...")
-                        await asyncio.sleep(retry_delay)
-                        retry_delay *= 2  # 指数退避
-                    else:
-                        raise e
+            content = await self.researcher.context_manager.get_similar_content_by_query(sub_query, scraped_data)
+            self.logger.info(f"Content found for sub-query: {len(str(content)) if content else 0} chars")
+            # content 进行分类
+            result = await self.classify_content(content)
+
+            if content and self.researcher.verbose:
+                await stream_output(
+                    "logs", "subquery_context_window", f"📃 {result}", self.researcher.websocket
+                )
+            elif self.researcher.verbose:
+                await stream_output(
+                    "logs",
+                    "subquery_context_not_found",
+                    f"🤷 No content found for '{sub_query}'...",
+                    self.researcher.websocket,
+                )
+            if content:
+                if self.json_handler:
+                    self.json_handler.log_event("content_found", {
+                        "sub_query": sub_query,
+                        "content_size": len(content)
+                    })
+            return content
         except Exception as e:
             self.logger.error(f"Error processing sub-query {sub_query}: {e}", exc_info=True)
             return ""
+
 
     async def _process_sub_query_with_vectorstore(self, sub_query: str, filter: Optional[dict] = None):
         """Takes in a sub query and gathers context from the user provided vector store
@@ -406,7 +394,10 @@ class ResearchConductor:
 
         # 将没有内容的分类进行剔除，不在输出展示
         classified = {key: value for key, value in classified.items() if value}
-        return classified
+        # 使用 json.dumps 将字典转换为 JSON 字符串，确保使用双引号
+        classified_json = json.dumps(classified, ensure_ascii=False, indent=2)
+
+        return classified_json
 
     async def _get_new_urls(self, url_set_input):
         """Gets the new urls from the given url set.
