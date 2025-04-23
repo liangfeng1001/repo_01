@@ -24,7 +24,7 @@ class ContextManager:
             documents=pages, embeddings=self.researcher.memory.get_embeddings()
         )
         return await context_compressor.async_get_context(
-            query=query, max_results=10, cost_callback=self.researcher.add_costs
+            query=query, max_results=20, cost_callback=self.researcher.add_costs
         )
         
     async def get_similar_content_by_query_with_vectorstore(self, query, filter): 

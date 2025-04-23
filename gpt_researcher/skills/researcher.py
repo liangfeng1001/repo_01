@@ -14,6 +14,7 @@ from pathlib import Path
 import markdown
 from weasyprint import HTML
 import openai
+import numpy as np
 
 
 
@@ -221,6 +222,94 @@ class ResearchConductor:
         )
         return context
 
+    async def _calculate_query_similarity(self, main_query, sub_query):
+        """计算主查询和子查询的相似度"""
+        main_embedding = await self.researcher.memory.get_embeddings().aembed_query(main_query)
+        sub_embedding = await self.researcher.memory.get_embeddings().aembed_query(sub_query)
+        similarity = np.dot(main_embedding, sub_embedding) / (
+            np.linalg.norm(main_embedding) * np.linalg.norm(sub_embedding)
+        )
+        return similarity
+
+    def _calculate_context_rank_score(self, total_results, current_rank):
+        """计算上下文排序得分"""
+        return (total_results - current_rank + 1) / total_results
+
+    def _calculate_source_authority_score(self, source):
+        """计算来源权威性得分"""
+        source_scores = {
+            "pubmed": 2,
+            "arxiv": 1,
+            "tavily": 1
+        }
+        return source_scores.get(source.lower(), 0)
+
+    async def _process_and_score_sub_query(self, main_query, sub_query, scraped_data, query_domains):
+        """处理子查询并计算得分"""
+        # 计算主查询和子查询的相似度
+        query_similarity = await self._calculate_query_similarity(main_query, sub_query)
+        
+        # 获取子查询的上下文
+        context = await self._process_sub_query(sub_query, scraped_data, query_domains)
+        if not context:
+            return []
+        
+        # 解析上下文内容
+        context_items = []
+        current_item = {}
+        for line in context.split('\n'):
+            if line.startswith('Source:'):
+                if current_item:
+                    context_items.append(current_item)
+                current_item = {'source': line.replace('Source:', '').strip()}
+            elif line.startswith('Title:'):
+                current_item['title'] = line.replace('Title:', '').strip()
+            elif line.startswith('Content:'):
+                current_item['content'] = line.replace('Content:', '').strip()
+        
+        if current_item:
+            context_items.append(current_item)
+        
+        # 对每个上下文项进行分类
+        for item in context_items:
+            source = item['source'].lower()
+            if 'arxiv' in source:
+                item['source_type'] = 'arxiv'
+            elif 'ncbi' in source:
+                item['source_type'] = 'pubmed'
+            else:
+                item['source_type'] = 'tavily'
+        
+        # 计算每个上下文项的得分
+        total_items = len(context_items)
+        scored_items = []
+        for i, item in enumerate(context_items):
+            # 计算上下文排序得分
+            context_rank_score = self._calculate_context_rank_score(total_items, i)
+            
+            # 计算来源权威性得分
+            source_score = self._calculate_source_authority_score(item['source_type'])
+            
+            # 计算总得分 (w1=0.4, w2=0.4, w3=0.2)
+            total_score = (
+                0.4 * query_similarity +  # 主查询与子查询相关度
+                0.4 * context_rank_score +  # 上下文排序得分
+                0.2 * source_score  # 来源权威性得分
+            )
+            
+            scored_items.append({
+                'content': item['content'],
+                'source': item['source'],
+                'title': item['title'],
+                'source_type': item['source_type'],
+                'similarity_score': query_similarity,
+                'context_rank_score': context_rank_score,
+                'source_authority_score': source_score,
+                'score': total_score
+            })
+        
+        return scored_items
+
     async def _get_context_by_web_search(self, query, scraped_data: list = [], query_domains: list = []):
         """
         Generates the context for the research task by searching the query and scraping the results
@@ -247,22 +336,86 @@ class ResearchConductor:
                 sub_queries,
             )
 
-        # Using asyncio.gather to process the sub_queries asynchronously
+        # 获取原始搜索结果
+        context = await asyncio.gather(
+            *[
+                self._process_sub_query(sub_query, scraped_data, query_domains)
+                for sub_query in sub_queries
+            ]
+        )
+        
+        # 记录原始搜索结果
+        self.logger.info("原始搜索结果:")
+        for idx, content in enumerate(context):
+            if content:
+                self.logger.info(f"子查询 {idx + 1} 的结果:")
+                self.logger.info(content)
+                self.logger.info("-" * 50)
+        
+        # 处理所有子查询并计算得分
         try:
-            context = await asyncio.gather(
-                *[
-                    self._process_sub_query(sub_query, scraped_data, query_domains)
-                    for sub_query in sub_queries
-                ]
-            )
-            self.logger.info(f"Gathered context from {len(context)} sub-queries")
-            # Filter out empty results and join the context
-            context = [c for c in context if c]
+            all_scored_items = []
+            for sub_query in sub_queries:
+                scored_items = await self._process_and_score_sub_query(
+                    query, sub_query, scraped_data, query_domains
+                )
+                all_scored_items.extend(scored_items)
+            
+            # 记录排序前的得分情况
+            self.logger.info("\n排序前的得分情况:")
+            for idx, item in enumerate(all_scored_items):
+                self.logger.info(f"项目 {idx + 1}:")
+                self.logger.info(f"  来源: {item['source']}")
+                self.logger.info(f"  来源类型: {item['source_type']}")
+                self.logger.info(f"  标题: {item['title']}")
+                self.logger.info(f"  内容长度: {len(item['content'])}")
+                self.logger.info(f"  相似度得分: {item['similarity_score']:.4f}")
+                self.logger.info(f"  上下文排名得分: {item['context_rank_score']:.4f}")
+                self.logger.info(f"  来源权威性得分: {item['source_authority_score']:.4f}")
+                self.logger.info(f"  总分: {item['score']:.4f}")
+                self.logger.info("-" * 50)
+            
+            # 按得分排序
+            all_scored_items.sort(key=lambda x: x['score'], reverse=True)
+            
+            # 记录排序后的结果
+            self.logger.info("\n排序后的结果:")
+            for idx, item in enumerate(all_scored_items):
+                self.logger.info(f"排名 {idx + 1}:")
+                self.logger.info(f"  来源: {item['source']}")
+                self.logger.info(f"  来源类型: {item['source_type']}")
+                self.logger.info(f"  标题: {item['title']}")
+                self.logger.info(f"  内容长度: {len(item['content'])}")
+                self.logger.info(f"  相似度得分: {item['similarity_score']:.4f}")
+                self.logger.info(f"  上下文排名得分: {item['context_rank_score']:.4f}")
+                self.logger.info(f"  来源权威性得分: {item['source_authority_score']:.4f}")
+                self.logger.info(f"  总分: {item['score']:.4f}")
+                self.logger.info("-" * 50)
+            
+            # 设置阈值（可以根据需要调整）
+            threshold = 0.5
+            filtered_items = [item for item in all_scored_items if item['score'] >= threshold]
+            
+            # 记录过滤后的结果
+            self.logger.info(f"\n阈值过滤后的结果 (阈值: {threshold}):")
+            self.logger.info(f"过滤前项目数: {len(all_scored_items)}")
+            self.logger.info(f"过滤后项目数: {len(filtered_items)}")
+            
+            # 格式化输出
+            context = []
+            for item in filtered_items:
+                context.append(
+                    f"Source: {item['source']}\n"
+                    f"Title: {item['title']}\n"
+                    f"Content: {item['content']}\n"
+                )
+            
             if context:
                 combined_context = " ".join(context)
-                self.logger.info(f"Combined context size: {len(combined_context)}")
+                self.logger.info(f"最终组合上下文大小: {len(combined_context)}")
                 return combined_context
             return []
+            
         except Exception as e:
             self.logger.error(f"Error during web search: {e}", exc_info=True)
             return []
