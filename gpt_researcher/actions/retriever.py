@@ -11,6 +11,7 @@ def get_retriever(retriever):
         retriever: Retriever class
 
     """
+    print(f"Getting retriever for: {retriever}")
     match retriever:
         case "google":
             from gpt_researcher.retrievers import GoogleSearch
@@ -68,6 +69,7 @@ def get_retriever(retriever):
             from gpt_researcher.retrievers import PubmedDianSearch
 
             retriever = PubmedDianSearch
+            print(f"Found PubmedDianSearch retriever")
         case "custom":
             from gpt_researcher.retrievers import CustomRetriever
 
@@ -75,6 +77,7 @@ def get_retriever(retriever):
 
         case _:
             retriever = None
+            print(f"No matching retriever found for: {retriever}")
 
     return retriever
 
@@ -90,25 +93,34 @@ def get_retrievers(headers, cfg):
     Returns:
         list: A list of retriever classes to be used for searching.
     """
+    print(f"Getting retrievers with headers: {headers}")
+    print(f"Config retrievers: {cfg.retrievers}")
+    
     # Check headers first for multiple retrievers
     if headers.get("retrievers"):
         retrievers = headers.get("retrievers").split(",")
+        print(f"Using retrievers from headers: {retrievers}")
     # If not found, check headers for a single retriever
     elif headers.get("retriever"):
         retrievers = [headers.get("retriever")]
+        print(f"Using single retriever from headers: {retrievers}")
     # If not in headers, check config for multiple retrievers
     elif cfg.retrievers:
         retrievers = cfg.retrievers
+        print(f"Using retrievers from config: {retrievers}")
     # If not found, check config for a single retriever
     elif cfg.retriever:
         retrievers = [cfg.retriever]
+        print(f"Using single retriever from config: {retrievers}")
     # If still not set, use default retriever
     else:
         retrievers = [get_default_retriever().__name__]
+        print(f"Using default retriever: {retrievers}")
 
     # Convert retriever names to actual retriever classes
-    # Use get_default_retriever() as a fallback for any invalid retriever names
-    return [get_retriever(r) or get_default_retriever() for r in retrievers]
+    retriever_classes = [get_retriever(r) or get_default_retriever() for r in retrievers]
+    print(f"Final retriever classes: {[r.__name__ for r in retriever_classes]}")
+    return retriever_classes
 
 
 def get_default_retriever(retriever):

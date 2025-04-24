@@ -79,6 +79,7 @@ class PubmedDianSearch():
         }
 
         encoded_url = url + "?" + urllib.parse.urlencode(params)
+        print(f"Encoded URL: {encoded_url}")
         search_response = []
 
         try:

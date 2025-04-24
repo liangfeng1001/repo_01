@@ -41,10 +41,11 @@ class ChiefEditorAgent:
         return output_dir
 
     def _initialize_agents(self):
+        """Initialize all agents needed for the research process."""
         return {
-            "writer": WriterAgent(self.websocket, self.stream_output, self.headers),
-            "editor": EditorAgent(self.websocket, self.stream_output, self.headers),
             "research": ResearchAgent(self.websocket, self.stream_output, self.tone, self.headers),
+            "editor": EditorAgent(self.websocket, self.stream_output, self.headers),
+            "writer": WriterAgent(self.websocket, self.stream_output, self.headers),
             "publisher": PublisherAgent(self.output_dir, self.websocket, self.stream_output, self.headers),
             "human": HumanAgent(self.websocket, self.stream_output, self.headers)
         }
