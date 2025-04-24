@@ -79,10 +79,11 @@ class PubmedDianSearch():
         }
 
         encoded_url = url + "?" + urllib.parse.urlencode(params)
+        print(f"Encoded URL: {encoded_url}")
         search_response = []
 
         try:
-            response = requests.get(encoded_url, headers=headers, timeout=20)
+            response = requests.get(encoded_url, headers=headers, timeout=80)
             if response.status_code == 200:
                 search_results = response.json()
                 if search_results:

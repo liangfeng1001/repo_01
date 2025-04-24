@@ -4,6 +4,7 @@ from ..prompts import generate_search_queries_prompt
 from typing import Any, List, Dict
 from ..config import Config
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,7 @@ async def plan_research_outline(
     parent_query: str,
     report_type: str,
     cost_callback: callable = None,
+    retriever_type: str = None
 ) -> List[str]:
     """
     Plan the research outline by generating sub-queries.
@@ -112,18 +114,102 @@ async def plan_research_outline(
         parent_query: Parent query
         report_type: Report type
         cost_callback: Callback for cost calculation
+        retriever_type: Type of retriever being used
     
     Returns:
         A list of sub-queries
     """
     
-    sub_queries = await generate_sub_queries(
-        query,
-        parent_query,
-        report_type,
-        search_results,
-        cfg,
-        cost_callback
-    )
+    # 根据检索器类型选择不同的子查询生成方法
+    if retriever_type == "pubmed_dian":
+        sub_queries = await generate_pubmed_sub_queries(
+            query,
+            parent_query,
+            report_type,
+            search_results,
+            cfg,
+            cost_callback
+        )
+    else:
+        sub_queries = await generate_sub_queries(
+            query,
+            parent_query,
+            report_type,
+            search_results,
+            cfg,
+            cost_callback
+        )
 
     return sub_queries
+
+async def generate_pubmed_sub_queries(
+    query: str,
+    parent_query: str,
+    report_type: str,
+    search_results: List[Dict[str, Any]],
+    cfg: Config,
+    cost_callback: callable = None
+) -> List[str]:
+    """
+    Generate specialized sub-queries for PubMed based on medical terms and basic search strategies
+    
+    Args:
+        query: Original query
+        parent_query: Parent query
+        report_type: Report type
+        search_results: Search results
+        cfg: Configuration object
+        cost_callback: Callback for cost calculation
+    
+    Returns:
+        A list of sub-queries in PubMed search format
+    """
+    logger.info(f"Generating PubMed sub-queries for query: {query}")
+    
+    prompt = f"""As a medical literature search expert, please generate simple PubMed search strings based on the following topic:
+    Topic: {query}
+    
+    Please follow these requirements:
+    1. Break down the topic and identify key concepts
+    2. Create 3 search strings of increasing specificity
+    3. Use only basic search terms without any field tags (no [MeSH], [tiab], etc.)
+    4. Use standard Boolean operators (AND, OR) in uppercase
+    5. Use double quotes for phrases
+    6. DO NOT use any special characters like asterisks (*) or backslashes (\)
+    
+    Generate 3 search strings that could be used to find relevant medical literature.
+    
+    Return a valid JSON array of strings:
+    [
+        "simple search string",
+        "more detailed search string",
+        "comprehensive search string"
+    ]
+    """
+    
+    try:
+        response = await create_chat_completion(
+            model=cfg.smart_llm_model,
+            messages=[
+                {"role": "system", "content": "You are a medical search expert who creates simple, effective search strings without field qualifiers or special syntax. Always return a valid JSON array of plain search strings."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            llm_provider=cfg.smart_llm_provider,
+            websocket=None,
+            max_tokens=cfg.smart_token_limit,
+            llm_kwargs=cfg.llm_kwargs,
+            cost_callback=cost_callback,
+        )
+        
+        # Parse the returned JSON string
+        sub_queries = json.loads(response)
+        logger.info(f"Generated PubMed sub-queries: {sub_queries}")
+        return sub_queries
+    except Exception as e:
+        logger.error(f"Error generating PubMed sub-queries: {e}")
+        logger.error(f"Original response: {response}")
+        
+        # If parsing fails, return a simplified version of the original query
+        simplified_query = query.replace(" ", " AND ")
+        return [simplified_query]

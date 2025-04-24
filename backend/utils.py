@@ -1,3 +1,4 @@
+import logging
 import aiofiles
 import urllib
 import mistune
@@ -57,6 +58,7 @@ async def write_md_to_pdf(text: str, filename: str = "") -> str:
                md_content=text,
                css_file_path=css_file_path,
                base_url=None)
+        logging.info(f"PDF generated at {file_path}")
         print(f"Report written to {file_path}")
     except Exception as e:
         print(f"Error in converting Markdown to PDF: {e}")
