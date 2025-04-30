@@ -295,6 +295,10 @@ class ResearchConductor:
         }
         return source_scores.get(source.lower(), 0)
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> e3607eead185b24851ddf9082210abea2f9137c8
     async def _get_context_by_web_search(self, query, scraped_data: list = [], query_domains: list = []):
         """
         Generates the context for the research task by searching the query and scraping the results
@@ -507,10 +511,15 @@ class ResearchConductor:
                 self.logger.info("-" * 50)
             
             # 设置阈值或取前N个结果
+<<<<<<< HEAD
             # threshold = 0.4  # 默认阈值
             # max_results = 10  # 最大结果数量
             threshold = 0.0  # 默认阈值
             max_results = 40  # 最大结果数量
+=======
+            threshold = 0.4  # 默认阈值
+            max_results = 10  # 最大结果数量
+>>>>>>> e3607eead185b24851ddf9082210abea2f9137c8
             
             # 应用阈值或取前N个
             filtered_items = [item for item in all_scored_items if item['score'] >= threshold]
@@ -534,6 +543,7 @@ class ResearchConductor:
                 )
                 formatted_context.append(formatted_block)
             
+<<<<<<< HEAD
 
             
             # 将filtered_items转换为分类格式
@@ -579,6 +589,8 @@ class ResearchConductor:
                     "logs", "subquery_context_window", f"{classified_json}", self.researcher.websocket
                 )
 
+=======
+>>>>>>> e3607eead185b24851ddf9082210abea2f9137c8
             if formatted_context:
                 combined_context = " ".join(formatted_context)
                 self.logger.info(f"最终组合上下文大小: {len(combined_context)}")
