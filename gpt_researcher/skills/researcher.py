@@ -390,14 +390,13 @@ class ResearchConductor:
                     
                     # 计算上下文排序得分
                     context_rank_score = self._calculate_context_rank_score(len(content_blocks), block_idx)
-                    
+
+                    journal_name = journal_info.get("journal_name", "")
+                    impact_factor = 0
                     if source_type == "pubmed" or source_type == "tavily":
 
                         # 提取期刊信息
                         journal_info = await self._extract_journal_info_from_url(url)
-                        journal_name = journal_info.get("journal_name", "")
-                        impact_factor = 0
-                        
                         # 查找期刊影响因子
                         if journal_df is not None and journal_name:
                             try:
@@ -439,9 +438,7 @@ class ResearchConductor:
                                     self.logger.info(f"期刊 '{journal_name}' 的影响因子 (JIF): {impact_factor}")
                             except Exception as e:
                                 self.logger.warning(f"期刊影响因子查询错误: {e}")
-                    else:
-                        journal_name = ""
-                        impact_factor = 0   
+
                     # 标准化影响因子得分到0-1范围
                     # 假设最高影响因子为100（可根据实际情况调整）
                     max_impact_factor = 503.1
