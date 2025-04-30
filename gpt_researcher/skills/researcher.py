@@ -295,10 +295,6 @@ class ResearchConductor:
         }
         return source_scores.get(source.lower(), 0)
 
-<<<<<<< HEAD
-=======
-
->>>>>>> e3607eead185b24851ddf9082210abea2f9137c8
     async def _get_context_by_web_search(self, query, scraped_data: list = [], query_domains: list = []):
         """
         Generates the context for the research task by searching the query and scraping the results
@@ -511,15 +507,8 @@ class ResearchConductor:
                 self.logger.info("-" * 50)
             
             # 设置阈值或取前N个结果
-<<<<<<< HEAD
-            # threshold = 0.4  # 默认阈值
-            # max_results = 10  # 最大结果数量
-            threshold = 0.0  # 默认阈值
-            max_results = 40  # 最大结果数量
-=======
             threshold = 0.4  # 默认阈值
             max_results = 10  # 最大结果数量
->>>>>>> e3607eead185b24851ddf9082210abea2f9137c8
             
             # 应用阈值或取前N个
             filtered_items = [item for item in all_scored_items if item['score'] >= threshold]
@@ -543,54 +532,6 @@ class ResearchConductor:
                 )
                 formatted_context.append(formatted_block)
             
-<<<<<<< HEAD
-
-            
-            # 将filtered_items转换为分类格式
-            classified_items = {
-                "arxiv": [],
-                "pubmed": [],
-                "tavily": []
-            }
-
-            for item in filtered_items:
-                source = item['source']
-                parsed_block = {
-                    "source": source,
-                    "JournalName": item['journal_name'],
-                    "title": item['title'],
-                    "content": item['content']
-                }
-                
-                # 使用相同的分类逻辑
-                if item['source_type'] == "pubmed":
-                    classified_items['pubmed'].append(parsed_block)
-                elif 'arxiv' in source.lower():
-                    classified_items['arxiv'].append(parsed_block)
-                else:
-                    classified_items['tavily'].append(parsed_block)
-
-                # if 'arxiv' in source.lower():
-                #     classified_items['arxiv'].append(parsed_block)
-                # elif 'ncbi' in source.lower():
-                #     classified_items['pubmed'].append(parsed_block)
-                # else:
-                #     classified_items['tavily'].append(parsed_block)
-
-
-                # 来源类型: item['source_type']
-
-            # 移除空分类
-            classified_items = {key: value for key, value in classified_items.items() if value}
-
-            # 转换为JSON字符串
-            classified_json = json.dumps(classified_items, ensure_ascii=False, indent=2)
-            await stream_output(
-                    "logs", "subquery_context_window", f"{classified_json}", self.researcher.websocket
-                )
-
-=======
->>>>>>> e3607eead185b24851ddf9082210abea2f9137c8
             if formatted_context:
                 combined_context = " ".join(formatted_context)
                 self.logger.info(f"最终组合上下文大小: {len(combined_context)}")
