@@ -295,10 +295,6 @@ class ResearchConductor:
         }
         return source_scores.get(source.lower(), 0)
 
-<<<<<<< HEAD
-=======
-
->>>>>>> e3607eead185b24851ddf9082210abea2f9137c8
     async def _get_context_by_web_search(self, query, scraped_data: list = [], query_domains: list = []):
         """
         Generates the context for the research task by searching the query and scraping the results
@@ -385,7 +381,8 @@ class ResearchConductor:
                     source_type = "tavily"
                     if 'arxiv' in url.lower():
                         source_type = "arxiv"
-                    elif 'ncbi' in url.lower() or 'pubmed' in url.lower():
+                    # elif 'ncbi' in url.lower() or 'pubmed' in url.lower():
+                    elif self.researcher.cfg.retrievers[0] == "pubmed_dian":
                         source_type = "pubmed"
                     
                     # 计算来源权威性得分
@@ -394,53 +391,57 @@ class ResearchConductor:
                     # 计算上下文排序得分
                     context_rank_score = self._calculate_context_rank_score(len(content_blocks), block_idx)
                     
-                    # 提取期刊信息
-                    journal_info = await self._extract_journal_info_from_url(url)
-                    journal_name = journal_info.get("journal_name", "")
-                    impact_factor = 0
-                    
-                    # 查找期刊影响因子
-                    if journal_df is not None and journal_name:
-                        try:
-                            # 标准化查询的期刊名称
-                            normalized_journal_name = await self._normalize_journal_name(journal_name)
+                    if source_type == "pubmed" or source_type == "tavily":
 
-                            # 尝试精确匹配
-                            # 首先创建一个标准化的期刊名称列
-                            journal_df['NormalizedName'] = journal_df['Name'].apply(
-                                lambda x: str(x).replace(' - ', '-').replace(' And ', ' & ').replace(' and ', ' & ').replace('&amp;', '&').replace('&AMP;', '&') if not pd.isna(x) else ""
-                            )
-                            journal_match = journal_df[journal_df['NormalizedName'].str.upper() == normalized_journal_name.upper()]
-                            
-                            # 如果没有精确匹配，尝试部分匹配
-                            if journal_match.empty:
-                                for _, row in journal_df.iterrows():
-                                    normalized_db_name = row['NormalizedName'].upper()
-                                    
-                                    if normalized_db_name in normalized_journal_name.upper() or normalized_journal_name.upper() in normalized_db_name:
-                                        journal_match = pd.DataFrame([row])
-                                        break
+                        # 提取期刊信息
+                        journal_info = await self._extract_journal_info_from_url(url)
+                        journal_name = journal_info.get("journal_name", "")
+                        impact_factor = 0
+                        
+                        # 查找期刊影响因子
+                        if journal_df is not None and journal_name:
+                            try:
+                                # 标准化查询的期刊名称
+                                normalized_journal_name = await self._normalize_journal_name(journal_name)
+
+                                # 尝试精确匹配
+                                # 首先创建一个标准化的期刊名称列
+                                journal_df['NormalizedName'] = journal_df['Name'].apply(
+                                    lambda x: str(x).replace(' - ', '-').replace(' And ', ' & ').replace(' and ', ' & ').replace('&amp;', '&').replace('&AMP;', '&') if not pd.isna(x) else ""
+                                )
+                                journal_match = journal_df[journal_df['NormalizedName'].str.upper() == normalized_journal_name.upper()]
+                                
+                                # 如果没有精确匹配，尝试部分匹配
+                                if journal_match.empty:
+                                    for _, row in journal_df.iterrows():
+                                        normalized_db_name = row['NormalizedName'].upper()
                                         
-                                    # 也检查缩写名
-                                    if 'AbbrName' in row and not pd.isna(row['AbbrName']):
-                                        abbr_name = str(row['AbbrName']).upper()
-                                        normalized_abbr_name = self._normalize_journal_name(abbr_name)
-                                        
-                                        if normalized_abbr_name in normalized_journal_name.upper() or normalized_journal_name.upper() in normalized_abbr_name:
+                                        if normalized_db_name in normalized_journal_name.upper() or normalized_journal_name.upper() in normalized_db_name:
                                             journal_match = pd.DataFrame([row])
                                             break
-                            
-                            # 如果有ISSN匹配
-                            if journal_match.empty and 'issn' in journal_info:
-                                issn = journal_info['issn']
-                                journal_match = journal_df[(journal_df['ISSN'] == issn) | (journal_df['EISSN'] == issn)]
-                            
-                            if not journal_match.empty:
-                                impact_factor = float(journal_match.iloc[0]['JIF']) if 'JIF' in journal_match.columns and not pd.isna(journal_match.iloc[0]['JIF']) else 0
-                                self.logger.info(f"期刊 '{journal_name}' 的影响因子 (JIF): {impact_factor}")
-                        except Exception as e:
-                            self.logger.warning(f"期刊影响因子查询错误: {e}")
-                    
+                                            
+                                        # 也检查缩写名
+                                        if 'AbbrName' in row and not pd.isna(row['AbbrName']):
+                                            abbr_name = str(row['AbbrName']).upper()
+                                            normalized_abbr_name = await self._normalize_journal_name(abbr_name)
+                                            
+                                            if normalized_abbr_name in normalized_journal_name.upper() or normalized_journal_name.upper() in normalized_abbr_name:
+                                                journal_match = pd.DataFrame([row])
+                                                break
+                                
+                                # 如果有ISSN匹配
+                                if journal_match.empty and 'issn' in journal_info:
+                                    issn = journal_info['issn']
+                                    journal_match = journal_df[(journal_df['ISSN'] == issn) | (journal_df['EISSN'] == issn)]
+                                
+                                if not journal_match.empty:
+                                    impact_factor = float(journal_match.iloc[0]['JIF']) if 'JIF' in journal_match.columns and not pd.isna(journal_match.iloc[0]['JIF']) else 0
+                                    self.logger.info(f"期刊 '{journal_name}' 的影响因子 (JIF): {impact_factor}")
+                            except Exception as e:
+                                self.logger.warning(f"期刊影响因子查询错误: {e}")
+                    else:
+                        journal_name = ""
+                        impact_factor = 0   
                     # 标准化影响因子得分到0-1范围
                     # 假设最高影响因子为100（可根据实际情况调整）
                     max_impact_factor = 503.1
@@ -506,15 +507,10 @@ class ResearchConductor:
                 self.logger.info("-" * 50)
             
             # 设置阈值或取前N个结果
-<<<<<<< HEAD
             # threshold = 0.4  # 默认阈值
             # max_results = 10  # 最大结果数量
             threshold = 0.0  # 默认阈值
             max_results = 40  # 最大结果数量
-=======
-            threshold = 0.4  # 默认阈值
-            max_results = 10  # 最大结果数量
->>>>>>> e3607eead185b24851ddf9082210abea2f9137c8
             
             # 应用阈值或取前N个
             filtered_items = [item for item in all_scored_items if item['score'] >= threshold]
@@ -538,7 +534,6 @@ class ResearchConductor:
                 )
                 formatted_context.append(formatted_block)
             
-<<<<<<< HEAD
 
             
             # 将filtered_items转换为分类格式
@@ -558,12 +553,22 @@ class ResearchConductor:
                 }
                 
                 # 使用相同的分类逻辑
-                if 'arxiv' in source.lower():
-                    classified_items['arxiv'].append(parsed_block)
-                elif 'ncbi' in source.lower():
+                if item['source_type'] == "pubmed":
                     classified_items['pubmed'].append(parsed_block)
+                elif 'arxiv' in source.lower():
+                    classified_items['arxiv'].append(parsed_block)
                 else:
                     classified_items['tavily'].append(parsed_block)
+
+                # if 'arxiv' in source.lower():
+                #     classified_items['arxiv'].append(parsed_block)
+                # elif 'ncbi' in source.lower():
+                #     classified_items['pubmed'].append(parsed_block)
+                # else:
+                #     classified_items['tavily'].append(parsed_block)
+
+
+                # 来源类型: item['source_type']
 
             # 移除空分类
             classified_items = {key: value for key, value in classified_items.items() if value}
@@ -574,8 +579,6 @@ class ResearchConductor:
                     "logs", "subquery_context_window", f"{classified_json}", self.researcher.websocket
                 )
 
-=======
->>>>>>> e3607eead185b24851ddf9082210abea2f9137c8
             if formatted_context:
                 combined_context = " ".join(formatted_context)
                 self.logger.info(f"最终组合上下文大小: {len(combined_context)}")
