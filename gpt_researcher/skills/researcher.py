@@ -736,13 +736,12 @@ class ResearchConductor:
         # 遍历所有检索器
         for retriever_class in self.researcher.retrievers:
             # 获取当前检索器类型
-            current_retriever_type = retriever_class.__name__.lower()
+            current_retriever_type = retriever_class.__name__.lower() 
             # 映射检索器类型
             retriever_type_mapping = {
                 'tavilysearch': 'tavily',
                 'arxivsearch': 'arxiv',
-                'PubmedDianSearch': 'pubmed',  # 将pubmediandiansearch映射为pubmed
-                'pubmedsearch': 'pubmed'  # 添加pubmedsearch的映射
+                'PubmedDianSearch': 'pubmed'  # 将pubmediandiansearch映射为pubmed
             }
             current_retriever_type = retriever_type_mapping.get(current_retriever_type, 'tavily')
             self.logger.info(f"Current retriever type: {current_retriever_type} (original: {retriever_class.__name__})")
