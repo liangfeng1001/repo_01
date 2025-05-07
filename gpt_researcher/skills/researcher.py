@@ -8,7 +8,7 @@ import logging
 import os
 from gpt_researcher.llm_provider.generic.base import GenericLLMProvider
 from ..actions.utils import stream_output
-from ..actions.query_processing import plan_research_outline, get_search_results
+from ..actions.query_processing import plan_research_outline, get_search_results, generate_pubmed_sub_queries
 from ..document import DocumentLoader, OnlineDocumentLoader, LangChainDocumentLoader
 from ..utils.enum import ReportSource, ReportType, Tone
 from ..utils.logging_config import get_json_handler, get_research_logger
@@ -54,13 +54,6 @@ class ResearchConductor:
             self.researcher.websocket,
         )
 
-        # 获取当前检索器的类型
-        retriever_type = self.researcher.cfg.retrievers[0]
-        self.logger.info(f"Current retriever type: {retriever_type}")
-        
-        # 检查是否是PubMed检索器
-        if retriever_type == "pubmed_dian":
-            self.logger.info(f"Using PubMed Dian retriever")
 
         outline = await plan_research_outline(
             query=query,
@@ -69,8 +62,7 @@ class ResearchConductor:
             cfg=self.researcher.cfg,
             parent_query=self.researcher.parent_query,
             report_type=self.researcher.report_type,
-            cost_callback=self.researcher.add_costs,
-            retriever_type=retriever_type  # 传递检索器类型
+            cost_callback=self.researcher.add_costs
         )
         self.logger.info(f"Research outline planned: {outline}")
         return outline
@@ -357,131 +349,143 @@ class ResearchConductor:
                 # 计算主查询和子查询的相似度
                 query_similarity = await self._calculate_query_similarity(query, sub_query)
                 
-                # 解析上下文内容
-                content_blocks = re.split(r'\n(?=Source: https?://)', context[idx].strip())
+                # 解析块内容
+                block = context[idx].strip()
                 
-                # 处理每个内容块
-                for block_idx, block in enumerate(content_blocks):
-                    if not block.strip():
-                        continue
-                        
-                    # 解析块内容
-                    source_match = re.search(r'^Source: (https?://[^\s]+)', block, re.M)
-                    title_match = re.search(r'Title: (.+)', block)
-                    content_match = re.search(r'Content: (.+)', block, re.DOTALL)
+                # 解析块内容
+                source_match = re.search(r'^Source: (https?://[^\s]+)', block, re.M)
+                title_match = re.search(r'Title: (.+)', block)
+                content_match = re.search(r'Content: (.+)', block, re.DOTALL)
+                
+                if not all([source_match, title_match, content_match]):
+                    continue
                     
-                    if not all([source_match, title_match, content_match]):
-                        continue
-                        
-                    url = source_match.group(1)
-                    title = title_match.group(1).strip()
-                    content_text = content_match.group(1).strip()
-                    
-                    # 确定来源类型
-                    source_type = "tavily"
+                url = source_match.group(1)
+                title = title_match.group(1).strip()
+                content_text = content_match.group(1).strip()
+                
+                # 确定来源类型
+                source_type = "tavily"  # 默认类型
+                
+                # 从scraped_data中获取检索器类型
+                for item in scraped_data:
+                    if item.get('url') == url and 'retriever_type' in item:
+                        source_type = item['retriever_type']
+                        self.logger.info(f"从scraped_content中获取到检索器类型: {source_type}")
+                        break
+                
+
+                if source_type == "tavily":
                     if 'arxiv' in url.lower():
                         source_type = "arxiv"
-                    # elif 'ncbi' in url.lower() or 'pubmed' in url.lower():
-                    elif self.researcher.cfg.retrievers[0] == "pubmed_dian":
+                    elif 'ncbi' in url.lower() or 'pubmed' in url.lower():
                         source_type = "pubmed"
-                    
-                    # 计算来源权威性得分
-                    source_authority_score = self._calculate_source_authority_score(source_type)
-                    
-                    # 计算上下文排序得分
-                    context_rank_score = self._calculate_context_rank_score(len(content_blocks), block_idx)
 
+                
+                # 计算来源权威性得分
+                source_authority_score = self._calculate_source_authority_score(source_type)
+                
+                # 计算上下文排序得分
+                context_rank_score = self._calculate_context_rank_score(len(context), idx)
+
+
+                impact_factor = 0
+                
+                if source_type == "pubmed" or source_type == "tavily":
+                    # 提取期刊信息
+                    journal_info = await self._extract_journal_info_from_url(url)
                     journal_name = journal_info.get("journal_name", "")
-                    impact_factor = 0
-                    if source_type == "pubmed" or source_type == "tavily":
+                    # 查找期刊影响因子
+                    if journal_df is not None and journal_name:
+                        try:
+                            # 标准化查询的期刊名称
+                            normalized_journal_name = await self._normalize_journal_name(journal_name)
 
-                        # 提取期刊信息
-                        journal_info = await self._extract_journal_info_from_url(url)
-                        # 查找期刊影响因子
-                        if journal_df is not None and journal_name:
-                            try:
-                                # 标准化查询的期刊名称
-                                normalized_journal_name = await self._normalize_journal_name(journal_name)
-
-                                # 尝试精确匹配
-                                # 首先创建一个标准化的期刊名称列
-                                journal_df['NormalizedName'] = journal_df['Name'].apply(
-                                    lambda x: str(x).replace(' - ', '-').replace(' And ', ' & ').replace(' and ', ' & ').replace('&amp;', '&').replace('&AMP;', '&') if not pd.isna(x) else ""
-                                )
-                                journal_match = journal_df[journal_df['NormalizedName'].str.upper() == normalized_journal_name.upper()]
-                                
-                                # 如果没有精确匹配，尝试部分匹配
-                                if journal_match.empty:
-                                    for _, row in journal_df.iterrows():
-                                        normalized_db_name = row['NormalizedName'].upper()
+                            # 尝试精确匹配
+                            # 首先创建一个标准化的期刊名称列
+                            journal_df['NormalizedName'] = journal_df['Name'].apply(
+                                lambda x: str(x).replace(' - ', '-').replace(' And ', ' & ').replace(' and ', ' & ').replace('&amp;', '&').replace('&AMP;', '&') if not pd.isna(x) else ""
+                            )
+                            journal_match = journal_df[journal_df['NormalizedName'].str.upper() == normalized_journal_name.upper()]
+                            
+                            # 如果没有精确匹配，尝试部分匹配
+                            if journal_match.empty:
+                                for _, row in journal_df.iterrows():
+                                    normalized_db_name = row['NormalizedName'].upper()
+                                    
+                                    if normalized_db_name in normalized_journal_name.upper() or normalized_journal_name.upper() in normalized_db_name:
+                                        journal_match = pd.DataFrame([row])
+                                        break
                                         
-                                        if normalized_db_name in normalized_journal_name.upper() or normalized_journal_name.upper() in normalized_db_name:
+                                    # 也检查缩写名
+                                    if 'AbbrName' in row and not pd.isna(row['AbbrName']):
+                                        abbr_name = str(row['AbbrName']).upper()
+                                        normalized_abbr_name = await self._normalize_journal_name(abbr_name)
+                                        
+                                        if normalized_abbr_name in normalized_journal_name.upper() or normalized_journal_name.upper() in normalized_abbr_name:
                                             journal_match = pd.DataFrame([row])
                                             break
-                                            
-                                        # 也检查缩写名
-                                        if 'AbbrName' in row and not pd.isna(row['AbbrName']):
-                                            abbr_name = str(row['AbbrName']).upper()
-                                            normalized_abbr_name = await self._normalize_journal_name(abbr_name)
-                                            
-                                            if normalized_abbr_name in normalized_journal_name.upper() or normalized_journal_name.upper() in normalized_abbr_name:
-                                                journal_match = pd.DataFrame([row])
-                                                break
-                                
-                                # 如果有ISSN匹配
-                                if journal_match.empty and 'issn' in journal_info:
-                                    issn = journal_info['issn']
-                                    journal_match = journal_df[(journal_df['ISSN'] == issn) | (journal_df['EISSN'] == issn)]
-                                
-                                if not journal_match.empty:
-                                    impact_factor = float(journal_match.iloc[0]['JIF']) if 'JIF' in journal_match.columns and not pd.isna(journal_match.iloc[0]['JIF']) else 0
-                                    self.logger.info(f"期刊 '{journal_name}' 的影响因子 (JIF): {impact_factor}")
-                            except Exception as e:
-                                self.logger.warning(f"期刊影响因子查询错误: {e}")
+                            
+                            # 如果有ISSN匹配
+                            if journal_match.empty and 'issn' in journal_info:
+                                issn = journal_info['issn']
+                                journal_match = journal_df[(journal_df['ISSN'] == issn) | (journal_df['EISSN'] == issn)]
+                            
+                            if not journal_match.empty:
+                                impact_factor = float(journal_match.iloc[0]['JIF']) if 'JIF' in journal_match.columns and not pd.isna(journal_match.iloc[0]['JIF']) else 0
+                                self.logger.info(f"期刊 '{journal_name}' 的影响因子 (JIF): {impact_factor}")
+                        except Exception as e:
+                            self.logger.warning(f"期刊影响因子查询错误: {e}")
 
-                    # 标准化影响因子得分到0-1范围
-                    # 假设最高影响因子为100（可根据实际情况调整）
-                    max_impact_factor = 503.1
-                    normalized_impact_factor = min(impact_factor / max_impact_factor, 1.0)
-                    
-                    # 计算总得分 (w1=0.1, w2=0.2, w3=0.2, w4=0.5)
-                    total_score = (
-                        0.1 * query_similarity +       # 主查询与子查询相关度
-                        0.2 * context_rank_score +     # 上下文排序得分
-                        0.2 * source_authority_score + # 来源权威性得分
-                        0.5 * normalized_impact_factor # 期刊影响因子得分
-                    )
-                    
-                    all_scored_items.append({
-                        'content': content_text,
-                        'source': url,
-                        'title': title,
-                        'journal_name': journal_name,
-                        'source_type': source_type,
-                        'similarity_score': query_similarity,
-                        'context_rank_score': context_rank_score,
-                        'source_authority_score': source_authority_score,
-                        'impact_factor': impact_factor,
-                        'normalized_impact_factor': normalized_impact_factor,
-                        'score': total_score
-                    })
+                # 标准化影响因子得分到0-1范围
+                # 假设最高影响因子为100（可根据实际情况调整）
+                max_impact_factor = 503.1
+                normalized_impact_factor = min(impact_factor / max_impact_factor, 1.0)
+                
+                # 计算总得分 (w1=0.1, w2=0.2, w3=0.2, w4=0.5)
+                total_score = (
+                    0.1 * query_similarity +       # 主查询与子查询相关度
+                    0.2 * context_rank_score +     # 上下文排序得分
+                    0.2 * source_authority_score + # 来源权威性得分
+                    0.5 * normalized_impact_factor # 期刊影响因子得分
+                )
+                
+                all_scored_items.append({
+                    'content': content_text,
+                    'source': url,
+                    'title': title,
+                    'journal_name': journal_name,
+                    'source_type': source_type,
+                    'similarity_score': query_similarity,
+                    'context_rank_score': context_rank_score,
+                    'source_authority_score': source_authority_score,
+                    'impact_factor': impact_factor,
+                    'normalized_impact_factor': normalized_impact_factor,
+                    'score': total_score
+                })
             
             # 记录排序前的得分情况
             self.logger.info("\n排序前的得分情况:")
             for idx, item in enumerate(all_scored_items):
-                self.logger.info(f"项目 {idx + 1}:")
-                self.logger.info(f"  来源: {item['source']}")
-                self.logger.info(f"  期刊名称: {item['journal_name']}")
-                self.logger.info(f"  来源类型: {item['source_type']}")
-                self.logger.info(f"  标题: {item['title']}")
-                self.logger.info(f"  内容长度: {len(item['content'])}")
-                self.logger.info(f"  相似度得分: {item['similarity_score']:.4f}")
-                self.logger.info(f"  上下文排名得分: {item['context_rank_score']:.4f}")
-                self.logger.info(f"  来源权威性得分: {item['source_authority_score']:.4f}")
-                self.logger.info(f"  影响因子: {item['impact_factor']}")
-                self.logger.info(f"  标准化影响因子得分: {item['normalized_impact_factor']:.4f}")
-                self.logger.info(f"  总分: {item['score']:.4f}")
-                self.logger.info("-" * 50)
+                try:
+                    self.logger.info(f"项目 {idx + 1}:")
+                    self.logger.info(f"  来源: {item['source']}")
+                    self.logger.info(f"  期刊名称: {item['journal_name']}")
+                    self.logger.info(f"  来源类型: {item['source_type']}")
+                    # 处理标题中的特殊字符
+                    title = item['title'].encode('utf-8', errors='ignore').decode('utf-8')
+                    self.logger.info(f"  标题: {title}")
+                    self.logger.info(f"  内容长度: {len(item['content'])}")
+                    self.logger.info(f"  相似度得分: {item['similarity_score']:.4f}")
+                    self.logger.info(f"  上下文排名得分: {item['context_rank_score']:.4f}")
+                    self.logger.info(f"  来源权威性得分: {item['source_authority_score']:.4f}")
+                    self.logger.info(f"  影响因子: {item['impact_factor']}")
+                    self.logger.info(f"  标准化影响因子得分: {item['normalized_impact_factor']:.4f}")
+                    self.logger.info(f"  总分: {item['score']:.4f}")
+                    self.logger.info("-" * 50)
+                except Exception as e:
+                    self.logger.warning(f"记录项目 {idx + 1} 时出错: {str(e)}")
+                    continue
             
             # 按得分排序
             all_scored_items.sort(key=lambda x: x['score'], reverse=True)
@@ -564,14 +568,42 @@ class ResearchConductor:
 
             content = await self.researcher.context_manager.get_similar_content_by_query(sub_query, scraped_data)
             self.logger.info(f"Content found for sub-query: {len(str(content)) if content else 0} chars")
-            # content 进行分类
-            result = await self.classify_content(content)
+            
+            # 解析内容块并添加检索器类型信息
+            if content:
+                content_blocks = re.split(r'\n(?=Source: https?://)', content.strip())
+                processed_blocks = []
+                
+                for block in content_blocks:
+                    if not block.strip():
+                        continue
+                        
+                    # 解析块内容
+                    source_match = re.search(r'^Source: (https?://[^\s]+)', block, re.M)
+                    title_match = re.search(r'Title: (.+)', block)
+                    content_match = re.search(r'Content: (.+)', block, re.DOTALL)
+                    
+                    if not all([source_match, title_match, content_match]):
+                        continue
+                        
+                    url = source_match.group(1)
+                    title = title_match.group(1).strip()
+                    content_text = content_match.group(1).strip()
+                    
+                    
+                    # 构建新的内容块，包含检索器类型信息
+                    processed_block = (
+                        f"Source: {url}\n"
+                        f"Title: {title}\n"
+                        f"Content: {content_text}\n"
+                    )
+                    processed_blocks.append(processed_block)
+                
+                # 重新组合处理后的内容
+                content = "\n".join(processed_blocks)
 
             if content and self.researcher.verbose:
                 print(f"Content found 12345")
-                # await stream_output(
-                #     "logs", "subquery_context_window", f"{result}", self.researcher.websocket
-                # )
             elif self.researcher.verbose:
                 await stream_output(
                     "logs",
@@ -699,26 +731,64 @@ class ResearchConductor:
 
     async def _search_relevant_source_urls(self, query, query_domains: list = []):
         new_search_urls = []
+        search_results_with_type = []  # 存储带检索器类型的结果
 
-        # Iterate through all retrievers
+        # 遍历所有检索器
         for retriever_class in self.researcher.retrievers:
-            # Instantiate the retriever with the sub-query
-            retriever = retriever_class(query, query_domains=query_domains)
+            # 获取当前检索器类型
+            current_retriever_type = retriever_class.__name__.lower()
+            # 映射检索器类型
+            retriever_type_mapping = {
+                'tavilysearch': 'tavily',
+                'arxivsearch': 'arxiv',
+                'PubmedDianSearch': 'pubmed',  # 将pubmediandiansearch映射为pubmed
+                'pubmedsearch': 'pubmed'  # 添加pubmedsearch的映射
+            }
+            current_retriever_type = retriever_type_mapping.get(current_retriever_type, 'tavily')
+            self.logger.info(f"Current retriever type: {current_retriever_type} (original: {retriever_class.__name__})")
+            
+            # 根据检索器类型处理查询
+            processed_query = query
+            if current_retriever_type == "pubmed":
+                # 对 PubMed 检索器进行特殊处理
+                self.logger.info("Processing query for PubMed retriever")
+                # 使用 generate_pubmed_sub_queries 生成规范化的查询
+                sub_queries = await generate_pubmed_sub_queries(
+                    query=query,
+                    cfg=self.researcher.cfg,
+                    cost_callback=self.researcher.add_costs
+                )
+                # 使用第一个子查询作为主要查询
+                if sub_queries:
+                    processed_query = sub_queries[0]
+                    self.logger.info(f"Processed PubMed query: {processed_query}")
+                else:
+                    self.logger.warning("No PubMed sub-queries generated, skipping PubMed search")
+                    continue  # 如果没有生成子查询，跳过当前检索器
+            
+            # 实例化当前检索器
+            retriever = retriever_class(processed_query, query_domains=query_domains)
 
-            # Perform the search using the current retriever
+            # 执行搜索
             search_results = await asyncio.to_thread(
                 retriever.search, max_results=self.researcher.cfg.max_search_results_per_query
             )
 
-            # Collect new URLs from search results
+            # 为搜索结果添加检索器类型标识
+            for result in search_results:
+                result['retriever_type'] = current_retriever_type
+                search_results_with_type.append(result)
+
+            # 收集URL
             search_urls = [url.get("href") for url in search_results]
             new_search_urls.extend(search_urls)
 
-        # Get unique URLs
+        # 获取新的URL并随机打乱
         new_search_urls = await self._get_new_urls(new_search_urls)
         random.shuffle(new_search_urls)
 
-        return new_search_urls
+        # 返回URL列表和带检索器类型的结果
+        return new_search_urls, search_results_with_type
 
     async def _scrape_data_by_urls(self, sub_query, query_domains: list = []):
         """
@@ -730,7 +800,8 @@ class ResearchConductor:
         Returns:
             list: A list of scraped content results.
         """
-        new_search_urls = await self._search_relevant_source_urls(sub_query, query_domains)
+        # 获取URL列表和带检索器类型的结果
+        new_search_urls, search_results_with_type = await self._search_relevant_source_urls(sub_query, query_domains)
 
         # Log the research process if verbose mode is on
         if self.researcher.verbose:
@@ -744,10 +815,52 @@ class ResearchConductor:
         # Scrape the new URLs
         scraped_content = await self.researcher.scraper_manager.browse_urls(new_search_urls)
 
+        # 为每个内容添加检索器类型信息
+        for content in scraped_content:
+            if 'url' in content:
+                # 标准化URL以进行匹配
+                content_url = self._normalize_url(content['url'])
+                # 查找对应的检索器类型
+                found_type = False
+                for result in search_results_with_type:
+                    result_url = self._normalize_url(result.get('href', ''))
+                    if result_url and result_url == content_url:
+                        content['retriever_type'] = result['retriever_type']
+                        # self.logger.info(f"为URL {content['url']} 添加检索器类型: {result['retriever_type']}")
+                        found_type = True
+                        break
+                
+                # 如果没有找到匹配的检索器类型，使用URL特征判断
+                if not found_type:
+                    if 'arxiv' in content['url'].lower():
+                        content['retriever_type'] = 'arxiv'
+                        self.logger.info(f"URL {content['url']} 使用URL特征判断为arxiv")
+                    elif 'ncbi' in content['url'].lower() or 'pubmed' in content['url'].lower():
+                        content['retriever_type'] = 'pubmed'
+                        self.logger.info(f"URL {content['url']} 使用URL特征判断为pubmed")
+                    else:
+                        content['retriever_type'] = 'tavily'
+                        self.logger.info(f"URL {content['url']} 使用URL特征判断为tavily")
+
         if self.researcher.vector_store:
             self.researcher.vector_store.load(scraped_content)
 
         return scraped_content
+
+    def _normalize_url(self, url):
+        """标准化URL以便进行匹配"""
+        if not url:
+            return ""
+        # 移除URL中的协议前缀
+        url = re.sub(r'^https?://', '', url)
+        # 移除尾部斜杠
+        url = url.rstrip('/')
+        # 移除URL参数
+        url = url.split('?')[0]
+        # 移除锚点
+        url = url.split('#')[0]
+        return url.lower()
+
     async def _normalize_journal_name(self, name):
         """标准化期刊名称以提高匹配成功率"""
         if not name:

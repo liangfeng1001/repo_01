@@ -120,33 +120,19 @@ async def plan_research_outline(
         A list of sub-queries
     """
     
-    # 根据检索器类型选择不同的子查询生成方法
-    if retriever_type == "pubmed_dian":
-        sub_queries = await generate_pubmed_sub_queries(
-            query,
-            parent_query,
-            report_type,
-            search_results,
-            cfg,
-            cost_callback
-        )
-    else:
-        sub_queries = await generate_sub_queries(
-            query,
-            parent_query,
-            report_type,
-            search_results,
-            cfg,
-            cost_callback
-        )
+    sub_queries = await generate_sub_queries(
+        query,
+        parent_query,
+        report_type,
+        search_results,
+        cfg,
+        cost_callback
+    )
 
     return sub_queries
 
 async def generate_pubmed_sub_queries(
     query: str,
-    parent_query: str,
-    report_type: str,
-    search_results: List[Dict[str, Any]],
     cfg: Config,
     cost_callback: callable = None
 ) -> List[str]:
@@ -155,9 +141,6 @@ async def generate_pubmed_sub_queries(
     
     Args:
         query: Original query
-        parent_query: Parent query
-        report_type: Report type
-        search_results: Search results
         cfg: Configuration object
         cost_callback: Callback for cost calculation
     
