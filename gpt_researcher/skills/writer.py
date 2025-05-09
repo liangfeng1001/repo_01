@@ -148,6 +148,14 @@ class ReportGenerator:
                 f"📝 Introduction written for '{self.researcher.query}'",
                 self.researcher.websocket,
             )
+        # 输出introduction
+        if self.researcher.verbose:
+            await stream_output(
+                "logs",
+                "introduction",
+                f"{introduction}",
+                self.researcher.websocket,
+            )
 
         return introduction
 
@@ -173,6 +181,15 @@ class ReportGenerator:
                 "logs",
                 "subtopics_generated",
                 f"📊 Subtopics generated for '{self.researcher.query}'",
+                self.researcher.websocket,
+            )
+        # subtopics输出成markdown格式
+        extracted_tasks = [f"- {subtopic.task}" for subtopic in subtopics.subtopics]
+        if self.researcher.verbose:
+            await stream_output(
+                "logs",
+                "subtopics_generated",
+                f"{extracted_tasks}",
                 self.researcher.websocket,
             )
 
