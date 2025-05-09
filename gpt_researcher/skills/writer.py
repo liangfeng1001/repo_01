@@ -82,6 +82,12 @@ class ReportGenerator:
                 f"📝 Report written for '{self.researcher.query}'",
                 self.researcher.websocket,
             )
+        await stream_output(
+                "logs",
+                "report",
+                f"{report}",
+                self.researcher.websocket,
+            )
 
         return report
 

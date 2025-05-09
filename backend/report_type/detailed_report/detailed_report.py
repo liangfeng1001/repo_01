@@ -1,8 +1,6 @@
 import asyncio
 from typing import List, Dict, Set, Optional, Any
 from fastapi import WebSocket
-from gpt_researcher.utils.logger import get_formatted_logger
-logger = get_formatted_logger()
 import logging
 
 from gpt_researcher import GPTResearcher
@@ -60,33 +58,6 @@ class DetailedReport:
         self.global_urls: Set[str] = set(
             self.source_urls) if self.source_urls else set()
 
-    async def stream_output(
-        type, content, output, websocket=None, output_log=True, metadata=None
-    ):
-        """
-        Streams output to the websocket
-        Args:
-            type:
-            content:
-            output:
-
-        Returns:
-            None
-        """
-        if (not websocket or output_log) and type != "images":
-            try:
-                logger.info(f"{output}")
-            except UnicodeEncodeError:
-                # Option 1: Replace problematic characters with a placeholder
-                logger.error(output.encode(
-                    'cp1252', errors='replace').decode('cp1252'))
-
-        if websocket:
-            await websocket.send_json(
-                {"type": type, "content": content,
-                    "output": output, "metadata": metadata}
-            )
-
     async def run(self) -> str:
         await self._initial_research()
         subtopics = await self._get_all_subtopics()
@@ -139,12 +110,6 @@ class DetailedReport:
                 logger.info("============================================")
                 subtopic_reports.append(result)
                 subtopics_report_body += f"\n\n\n{result['report']}"
-                await self.stream_output(
-                    "logs",
-                    "table_of_contents",
-                    f"{subtopics_report_body}",
-                    self.websocket,
-                )
 
         return subtopic_reports, subtopics_report_body
 
