@@ -149,24 +149,24 @@ async def generate_pubmed_sub_queries(
     """
     logger.info(f"Generating PubMed sub-queries for query: {query}")
     
-    prompt = f"""As a medical literature search expert, please generate simple PubMed search strings based on the following topic:
+    prompt = f"""As a medical literature search expert, please analyze the following topic and generate simple search queries:
     Topic: {query}
     
-    Please follow these requirements:
-    1. Break down the topic and identify key concepts
-    2. Create 3 search strings of increasing specificity
-    3. Use only basic search terms without any field tags (no [MeSH], [tiab], etc.)
-    4. Use standard Boolean operators (AND, OR) in uppercase
-    5. Use double quotes for phrases
-    6. DO NOT use any special characters like asterisks (*) or backslashes (\)
+    Requirements:
+    1. Extract the main medical term(s) from the topic
+    2. For each medical term, add ONE most relevant related term
+    3. Keep each query short and simple (2-3 words maximum)
+    4. Use standard Boolean operators (AND) in uppercase
+    5. DO NOT use any special characters or field tags
     
-    Generate 3 search strings that could be used to find relevant medical literature.
+    Example:
+    Input: "What are the latest treatments for Chronic Myeloid Leukemia?"
+    Output: ["Withdrawal Chronic Myeloid Leukemia", "Treatment Chronic Myeloid Leukemia"]
     
     Return a valid JSON array of strings:
     [
-        "simple search string",
-        "more detailed search string",
-        "comprehensive search string"
+        "term1 AND term2",
+        "term3 AND term4"
     ]
     """
     
@@ -174,7 +174,7 @@ async def generate_pubmed_sub_queries(
         response = await create_chat_completion(
             model=cfg.smart_llm_model,
             messages=[
-                {"role": "system", "content": "You are a medical search expert who creates simple, effective search strings without field qualifiers or special syntax. Always return a valid JSON array of plain search strings."},
+                {"role": "system", "content": "You are a medical search expert who creates simple, effective search strings. Focus on extracting medical terms and adding one relevant term. Keep queries short and clear."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.4,

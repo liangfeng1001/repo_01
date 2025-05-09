@@ -367,19 +367,27 @@ class ResearchConductor:
                 # 确定来源类型
                 source_type = "tavily"  # 默认类型
                 
-                # 从scraped_data中获取检索器类型
-                for item in scraped_data:
-                    if item.get('url') == url and 'retriever_type' in item:
-                        source_type = item['retriever_type']
-                        self.logger.info(f"从scraped_content中获取到检索器类型: {source_type}")
-                        break
+                # 从内容块中获取检索器类型
+                retriever_type_match = re.search(r'RetrieverType: (\w+)', block)
+                if retriever_type_match:
+                    source_type = retriever_type_match.group(1)
+                    self.logger.info(f"从内容块中获取到检索器类型: {source_type}")
+                else:
+                    # 从scraped_data中获取检索器类型
+                    for item in scraped_data:
+                        if item.get('url') == url and 'retriever_type' in item:
+                            source_type = item['retriever_type']
+                            self.logger.info(f"从scraped_data中获取到检索器类型: {source_type}")
+                            break
                 
-
+                # 如果来源类型是tavily，根据URL特征进行二次分类
                 if source_type == "tavily":
                     if 'arxiv' in url.lower():
                         source_type = "arxiv"
+                        self.logger.info(f"根据URL特征将来源类型从tavily更改为arxiv")
                     elif 'ncbi' in url.lower() or 'pubmed' in url.lower():
                         source_type = "pubmed"
+                        self.logger.info(f"根据URL特征将来源类型从tavily更改为pubmed")
 
                 
                 # 计算来源权威性得分
@@ -590,12 +598,20 @@ class ResearchConductor:
                     title = title_match.group(1).strip()
                     content_text = content_match.group(1).strip()
                     
+                    # 从scraped_data中获取检索器类型
+                    retriever_type = "tavily"  # 默认类型
+                    for item in scraped_data:
+                        if item.get('url') == url and 'retriever_type' in item:
+                            retriever_type = item['retriever_type']
+                            self.logger.info(f"从scraped_data中获取到检索器类型: {retriever_type}")
+                            break
                     
                     # 构建新的内容块，包含检索器类型信息
                     processed_block = (
                         f"Source: {url}\n"
                         f"Title: {title}\n"
                         f"Content: {content_text}\n"
+                        f"RetrieverType: {retriever_type}\n"
                     )
                     processed_blocks.append(processed_block)
                 
@@ -741,7 +757,7 @@ class ResearchConductor:
             retriever_type_mapping = {
                 'tavilysearch': 'tavily',
                 'arxivsearch': 'arxiv',
-                'PubmedDianSearch': 'pubmed'  # 将pubmediandiansearch映射为pubmed
+                'pubmeddiansearch': 'pubmed'  # 使用小写形式
             }
             current_retriever_type = retriever_type_mapping.get(current_retriever_type, 'tavily')
             self.logger.info(f"Current retriever type: {current_retriever_type} (original: {retriever_class.__name__})")
@@ -767,7 +783,7 @@ class ResearchConductor:
             
             # 实例化当前检索器
             retriever = retriever_class(processed_query, query_domains=query_domains)
-
+            self.logger.info(f"*****use retriever: {current_retriever_type} search query: {processed_query}")
             # 执行搜索
             search_results = await asyncio.to_thread(
                 retriever.search, max_results=self.researcher.cfg.max_search_results_per_query
@@ -813,33 +829,41 @@ class ResearchConductor:
 
         # Scrape the new URLs
         scraped_content = await self.researcher.scraper_manager.browse_urls(new_search_urls)
+        
+        # 记录抓取结果
+        self.logger.info(f"抓取结果数量: {len(scraped_content)}")
+        
+        # 创建URL到检索器类型的映射
+        url_to_type = {}
+        for result in search_results_with_type:
+            if 'href' in result and 'retriever_type' in result:
+                normalized_url = self._normalize_url(result['href'])
+                url_to_type[normalized_url] = result['retriever_type']
+                self.logger.info(f"添加URL映射: {normalized_url} -> {result['retriever_type']}")
 
         # 为每个内容添加检索器类型信息
         for content in scraped_content:
             if 'url' in content:
-                # 标准化URL以进行匹配
-                content_url = self._normalize_url(content['url'])
-                # 查找对应的检索器类型
-                found_type = False
-                for result in search_results_with_type:
-                    result_url = self._normalize_url(result.get('href', ''))
-                    if result_url and result_url == content_url:
-                        content['retriever_type'] = result['retriever_type']
-                        # self.logger.info(f"为URL {content['url']} 添加检索器类型: {result['retriever_type']}")
-                        found_type = True
-                        break
+                content_url = content['url']
+                normalized_content_url = self._normalize_url(content_url)
+                self.logger.info(f"处理URL: {content_url}")
+                self.logger.info(f"标准化后的URL: {normalized_content_url}")
                 
-                # 如果没有找到匹配的检索器类型，使用URL特征判断
-                if not found_type:
-                    if 'arxiv' in content['url'].lower():
+                # 首先尝试从映射中获取类型
+                if normalized_content_url in url_to_type:
+                    content['retriever_type'] = url_to_type[normalized_content_url]
+                    self.logger.info(f"从URL映射中获取到检索器类型: {content['retriever_type']}")
+                else:
+                    # 如果没有找到匹配的检索器类型，使用URL特征判断
+                    if 'arxiv' in normalized_content_url:
                         content['retriever_type'] = 'arxiv'
-                        self.logger.info(f"URL {content['url']} 使用URL特征判断为arxiv")
-                    elif 'ncbi' in content['url'].lower() or 'pubmed' in content['url'].lower():
+                        self.logger.info(f"根据URL特征判断为arxiv")
+                    elif 'ncbi' in normalized_content_url or 'pubmed' in normalized_content_url:
                         content['retriever_type'] = 'pubmed'
-                        self.logger.info(f"URL {content['url']} 使用URL特征判断为pubmed")
+                        self.logger.info(f"根据URL特征判断为pubmed")
                     else:
                         content['retriever_type'] = 'tavily'
-                        self.logger.info(f"URL {content['url']} 使用URL特征判断为tavily")
+                        self.logger.info(f"根据URL特征判断为tavily")
 
         if self.researcher.vector_store:
             self.researcher.vector_store.load(scraped_content)

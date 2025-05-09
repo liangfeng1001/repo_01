@@ -1,9 +1,17 @@
 import asyncio
 from typing import List, Dict, Set, Optional, Any
 from fastapi import WebSocket
+import logging
 
 from gpt_researcher import GPTResearcher
 
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger('detailed_report')
 
 class DetailedReport:
     def __init__(
@@ -63,16 +71,27 @@ class DetailedReport:
         await self.gpt_researcher.conduct_research()
         self.global_context = self.gpt_researcher.context
         self.global_urls = self.gpt_researcher.visited_urls
+        logger.info("=== _initial_research ===")
+        logger.info(f"global_context: {self.global_context }")
+        logger.info(f"global_urls: {self.global_urls}")
+        logger.info("============================================")
 
     async def _get_all_subtopics(self) -> List[Dict]:
         subtopics_data = await self.gpt_researcher.get_subtopics()
+        
+        logger.info("=== Subtopics Data from _get_all_subtopics ===")
+        logger.info(f"Raw subtopics_data: {subtopics_data}")
+        logger.info(f"Subtopics type: {type(subtopics_data)}")
+        if hasattr(subtopics_data, 'subtopics'):
+            logger.info(f"Subtopics list: {subtopics_data.subtopics}")
+        logger.info("============================================")
 
         all_subtopics = []
         if subtopics_data and subtopics_data.subtopics:
             for subtopic in subtopics_data.subtopics:
                 all_subtopics.append({"task": subtopic.task})
         else:
-            print(f"Unexpected subtopics data format: {subtopics_data}")
+            logger.warning(f"Unexpected subtopics data format: {subtopics_data}")
 
         return all_subtopics
 
