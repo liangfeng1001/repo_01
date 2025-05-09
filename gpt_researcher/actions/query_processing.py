@@ -185,8 +185,16 @@ async def generate_pubmed_sub_queries(
             cost_callback=cost_callback,
         )
         
-        # Parse the returned JSON string
-        sub_queries = json.loads(response)
+        # 预处理响应，移除可能的 ```json 标记
+        response = response.strip()
+        if response.startswith("```json"):
+            response = response[7:]
+        if response.endswith("```"):
+            response = response[:-3]
+        response = response.strip()
+        
+        # 使用 json_repair.loads 替代 json.loads
+        sub_queries = json_repair.loads(response)
         logger.info(f"Generated PubMed sub-queries: {sub_queries}")
         return sub_queries
     except Exception as e:

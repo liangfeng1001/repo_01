@@ -62,6 +62,9 @@ class DetailedReport:
         await self._initial_research()
         subtopics = await self._get_all_subtopics()
         report_introduction = await self.gpt_researcher.write_introduction()
+        logger.info("=== report_introduction ===")
+        logger.info(f"report_introduction: {report_introduction}")
+        logger.info("============================================")
         _, report_body = await self._generate_subtopic_reports(subtopics)
         self.gpt_researcher.visited_urls.update(self.global_urls)
         report = await self._construct_detailed_report(report_introduction, report_body)
@@ -102,6 +105,9 @@ class DetailedReport:
         for subtopic in subtopics:
             result = await self._get_subtopic_report(subtopic)
             if result["report"]:
+                logger.info("=== sub_topic_report ===")
+                logger.info(f"report_introduction: {result}")
+                logger.info("============================================")
                 subtopic_reports.append(result)
                 subtopics_report_body += f"\n\n\n{result['report']}"
 
