@@ -49,9 +49,6 @@ class ChatAgentWithMemory:
                 cfg.embedding_model,
                 **cfg.embedding_kwargs
             ).get_embeddings()
-            # 每次使用 embedding 之后让程序暂停 100 秒
-            time.sleep(100)
-            print("embedding延时使用")
             self.vector_store = InMemoryVectorStore(self.embedding)
             self.vector_store.add_texts(documents)
 

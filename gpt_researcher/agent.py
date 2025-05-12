@@ -52,9 +52,11 @@ class GPTResearcher:
         headers: dict = None,
         max_subtopics: int = 5,
         log_handler=None,
+        report_counter: int = 0,
     ):
         self.query = query
         self.report_type = report_type
+        self.report_counter = report_counter
         
         self.cfg = Config(config_path)
         

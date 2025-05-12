@@ -39,6 +39,7 @@ class DetailedReport:
         self.websocket = websocket
         self.subtopics = subtopics
         self.headers = headers or {}
+        self.report_counter = 0
 
         self.gpt_researcher = GPTResearcher(
             query=self.query,
@@ -50,7 +51,8 @@ class DetailedReport:
             config_path=self.config_path,
             tone=self.tone,
             websocket=self.websocket,
-            headers=self.headers
+            headers=self.headers,
+            report_counter=self.report_counter
         )
         self.existing_headers: List[Dict] = []
         self.global_context: List[str] = []
@@ -114,6 +116,7 @@ class DetailedReport:
         return subtopic_reports, subtopics_report_body
 
     async def _get_subtopic_report(self, subtopic: Dict) -> Dict[str, str]:
+        self.report_counter += 1
         current_subtopic_task = subtopic.get("task")
         subtopic_assistant = GPTResearcher(
             query=current_subtopic_task,
@@ -128,6 +131,7 @@ class DetailedReport:
             agent=self.gpt_researcher.agent,
             role=self.gpt_researcher.role,
             tone=self.tone,
+            report_counter=self.report_counter
         )
 
         subtopic_assistant.context = list(set(self.global_context))
