@@ -106,9 +106,6 @@ class ResearchConductor:
         # 运行主函数
         self.researcher.query = await main(self.researcher.query)
 
-        # 如果 parent_query 为空（不是子查询），就用翻译后的 query 赋值
-        if not self.researcher.parent_query:
-            self.researcher.parent_query = self.researcher.query
         
         if self.json_handler:
             self.json_handler.update_content("query", self.researcher.query)
