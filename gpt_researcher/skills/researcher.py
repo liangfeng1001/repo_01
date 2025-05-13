@@ -69,43 +69,6 @@ class ResearchConductor:
 
     async def conduct_research(self):
         """Runs the GPT Researcher to conduct research"""
-        from langdetect import detect
-        async def is_english(text: str) -> bool:
-            """检测文本是否为英文"""
-            try:
-                # 快速检查中/日/韩文字符
-                if re.search(r'[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7a3]', text):
-                    return False
-                return detect(text) == 'en'
-            except Exception as e:
-                print(f"Error detecting language: {e}")
-                return False
-
-        async def translate_to_english(text: str) -> str:
-            """使用 Qwen 模型翻译文本"""
-            try:
-                qwen_local = GenericLLMProvider.from_provider("qwen_local")
-                prompt = f"请将以下内容准确翻译成英文（保留专业术语）：\n\n{text}\n\n只需返回翻译结果，不要添加任何解释。"
-                messages = [{"role": "user", "content": prompt}]
-                response = await qwen_local.get_chat_response(messages, stream=False)
-                return response.strip()
-            except Exception as e:
-                print(f"Translation error: {e}")
-                return text  # 失败时返回原文
-
-        async def main(query):
-            if not await is_english(query):
-                print(f"Translating non-English query: {query}")
-                translated = await translate_to_english(query)
-                print(f"Translated to: {translated}")
-                return translated
-            else:
-                print("Query is already in English.")
-                return query
-
-        # 运行主函数
-        self.researcher.query = await main(self.researcher.query)
-
         
         if self.json_handler:
             self.json_handler.update_content("query", self.researcher.query)
@@ -525,7 +488,7 @@ class ResearchConductor:
             
             # 设置阈值或取前N个结果
             threshold = 0.4  # 默认阈值
-            max_results = 10  # 最大结果数量
+            max_results = 20  # 最大结果数量
             
             # 应用阈值或取前N个
             filtered_items = [item for item in all_scored_items if item['score'] >= threshold]
@@ -576,6 +539,7 @@ class ResearchConductor:
 
             # 转换为JSON字符串
             classified_json = json.dumps(classified_items, ensure_ascii=False, indent=2)
+            self.logger.info(f"分类结果: {classified_json}")
             await stream_output(
                     "logs", "subquery_context_window", f"{classified_json}", self.researcher.websocket
                 )

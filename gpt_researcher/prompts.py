@@ -32,19 +32,49 @@ def generate_search_queries_prompt(
         task = question
 
     context_prompt = f"""
-You are a seasoned research assistant tasked with generating search queries to find relevant information for the following task: "{task}".
+You are a seasoned research assistant tasked with generating search queries to find relevant information for comprehensive academic research on: "{task}".
 Context: {context}
 
 Use this context to inform and refine your search queries. The context provides real-time web information that can help you generate more specific and relevant queries. Consider any current events, recent developments, or specific details mentioned in the context that could enhance the search queries.
+This context contains research content found using the initial query. It represents current research directions, methodologies, and findings related to the topic.
+
+Analyze this context to identify:
+- Key concepts and terminology used in current research
+- Research gaps or areas that need deeper exploration
+- Related subtopics or branches that emerged from the initial search
+- Methodologies or approaches mentioned that warrant further investigation
+- Connections to other research areas or interdisciplinary aspects
 """ if context else ""
 
     dynamic_example = ", ".join([f'"query {i+1}"' for i in range(max_iterations)])
 
     return f"""Write {max_iterations} google search queries to search online that form an objective opinion from the following task: "{task}"
 
-Assume the current date is {datetime.now(timezone.utc).strftime('%B %d, %Y')} if required.
-
+Assume the current date is {datetime.now(timezone.utc).strftime('%B %d, %Y')}, and focus on retrieving research content from the recent years if required.
+consider this context to inform and refine your search queries,the relationship between the context and the task, as these contexts may represent the main subjects of current research. Consider any recent developments or specific details mentioned in the context that could enhance the relevance and accuracy of the search queries.
 {context_prompt}
+
+Based on the context analysis, create queries that:
+
+1. **Expand on identified concepts**: Take key terms from the context and explore their deeper implications
+2. **Fill research gaps**: Target areas that the initial search didn't fully cover
+3. **Explore connections**: Investigate relationships between concepts found in the context
+4. **Deepen methodological understanding**: Dive deeper into specific approaches mentioned
+5. **Branch into related areas**: Explore adjacent topics suggested by the context
+
+Each query should:
+- Build upon insights from the context
+- Target specific unexplored or underdeveloped aspects
+- Use terminology and concepts discovered in the initial search
+- Progressively deepen the understanding of the topic
+- Maintain academic rigor and precision
+
+Avoid:
+- Repeating searches that would return the same results as the initial query
+- Queries too similar to what's already covered in the context
+- Generic queries that don't leverage the context insights
+- Overly broad queries that lose focus on the specific research direction
+
 You must respond with a list of strings in the following format: [{dynamic_example}].
 The response should contain ONLY the list.
 """
@@ -335,6 +365,56 @@ and research data:
 - There should NOT be any duplicate subtopics.
 - Limit the number of subtopics to a maximum of {max_subtopics}
 - Finally order the subtopics by their tasks, in a relevant and meaningful order which is presentable in a detailed report
+
+Generate high-quality subtopics that will form the structure of a comprehensive research report. 
+
+IMPORTANT INSTRUCTIONS:
+
+1. **Analyze the Research Data Carefully**:
+   - Identify key themes, methodologies, and findings from the provided research data
+   - Look for recurring concepts, research gaps, and emerging trends
+   - Pay attention to specific techniques, biomarkers, or mechanisms mentioned
+
+2. **Generate Subtopics That Are**:
+   - Directly derived from and supported by the research data
+   - Highly specific to the main topic (not generic or broadly applicable)
+   - Academically rigorous and using professional terminology
+   - Focused on distinct aspects that complement each other
+   - Structured to provide comprehensive coverage of the topic
+
+3. **Each Subtopic Should**:
+   - Address a specific research dimension of the main topic
+   - Be precise and focused (avoid overly broad statements)
+   - Use academic language and domain-specific terminology
+   - Represent a substantive section worthy of detailed discussion
+   - Build upon the evidence found in the research data
+   - Subtopics should closely revolve around the main topic or provided context, ensuring direct relevance and supporting a deeper understanding of the subject.
+
+
+4. **Subtopic Requirements**:
+   - Maximum number of subtopics: {max_subtopics}
+   - Existing subtopics to consider: {subtopics}
+   - No duplicate or overlapping subtopics
+   - Order subtopics logically from foundational to advanced/applied
+
+5. **Examples of Good vs Poor Subtopics**:
+   For a main topic "CRISPR-Cas9 Applications in Cancer Therapy":
+   
+   Good: "Off-target Effects Mitigation Strategies in CRISPR-Cas9 Cancer Gene Therapy"
+   Poor: "General Gene Editing Techniques" (Too broad, not specific to cancer or CRISPR)
+   
+   Good: "Delivery Systems for CRISPR-Cas9 in Solid Tumor Microenvironments"
+   Poor: "Cancer Treatment Methods" (Too generic, doesn't mention CRISPR technology)
+   
+   Good: "CRISPR-based Synthetic Lethality Screening in Drug-Resistant Cancers"
+   Poor: "Applications of CRISPR in Biology" (Not focused on cancer therapy, overly broad)
+   
+
+6. **Structure Considerations**:
+   - Start with foundational/methodological aspects if relevant
+   - Progress to specific applications or findings
+   - Include emerging trends or future directions if supported by data
+   - Ensure logical flow and progression between subtopics
 
 "IMPORTANT!":
 - Every subtopic MUST be relevant to the main topic and provided research data ONLY!
