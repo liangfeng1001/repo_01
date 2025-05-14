@@ -39,7 +39,6 @@ class DetailedReport:
         self.websocket = websocket
         self.subtopics = subtopics
         self.headers = headers or {}
-        self.report_counter = 0
 
         self.gpt_researcher = GPTResearcher(
             query=self.query,
@@ -52,7 +51,6 @@ class DetailedReport:
             tone=self.tone,
             websocket=self.websocket,
             headers=self.headers,
-            report_counter=self.report_counter
         )
         self.existing_headers: List[Dict] = []
         self.global_context: List[str] = []
@@ -100,9 +98,9 @@ class DetailedReport:
     async def _generate_subtopic_reports(self, subtopics: List[Dict]) -> tuple:
         subtopic_reports = []
         subtopics_report_body = ""
-
-        for subtopic in subtopics:
-            result = await self._get_subtopic_report(subtopic)
+        name = ['report_1','report_2','report_3']
+        for index,subtopic in enumerate(subtopics):
+            result = await self._get_subtopic_report(subtopic,name[index])
             if result["report"]:
                 logger.info("=== sub_topic_report ===")
                 logger.info(f"report_introduction: {result}")
@@ -112,8 +110,7 @@ class DetailedReport:
 
         return subtopic_reports, subtopics_report_body
 
-    async def _get_subtopic_report(self, subtopic: Dict) -> Dict[str, str]:
-        self.report_counter += 1
+    async def _get_subtopic_report(self, subtopic: Dict, name:str) -> Dict[str, str]:
         current_subtopic_task = subtopic.get("task")
         subtopic_assistant = GPTResearcher(
             query=current_subtopic_task,
@@ -128,7 +125,6 @@ class DetailedReport:
             agent=self.gpt_researcher.agent,
             role=self.gpt_researcher.role,
             tone=self.tone,
-            report_counter=self.report_counter
         )
 
         subtopic_assistant.context = list(set(self.global_context))
@@ -147,7 +143,11 @@ class DetailedReport:
             current_subtopic_task, parse_draft_section_titles_text, self.global_written_sections
         )
 
-        subtopic_report = await subtopic_assistant.write_report(self.existing_headers, relevant_contents)
+        subtopic_report = await subtopic_assistant.write_report(
+            existing_headers=self.existing_headers,
+            relevant_written_contents=relevant_contents,
+            name=name
+        )
 
         self.global_written_sections.extend(self.gpt_researcher.extract_sections(subtopic_report))
         self.global_context = list(set(subtopic_assistant.context))

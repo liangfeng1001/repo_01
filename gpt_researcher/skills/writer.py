@@ -10,8 +10,6 @@ from ..actions import (
     write_conclusion
 )
 
-# Global report counter
-_report_counter = 0
 
 class ReportGenerator:
     """Generates reports based on research data."""
@@ -29,7 +27,7 @@ class ReportGenerator:
             "headers": self.researcher.headers,
         }
 
-    async def write_report(self, existing_headers: list = [], relevant_written_contents: list = [], ext_context=None) -> str:
+    async def write_report(self, existing_headers: list = [], relevant_written_contents: list = [], ext_context=None, name:str="") -> str:
         """
         Write a report based on existing headers and relevant contents.
 
@@ -41,8 +39,6 @@ class ReportGenerator:
         Returns:
             str: The generated report.
         """
-        global _report_counter
-        _report_counter += 1  # Increment global counter
 
         # send the selected images prior to writing report
         research_images = self.researcher.get_research_images()
@@ -89,7 +85,7 @@ class ReportGenerator:
             )
         await stream_output(
                 "logs",
-                f"report_{_report_counter}",  # Use global counter
+                f"{name}", 
                 f"{report}",
                 self.researcher.websocket,
             )

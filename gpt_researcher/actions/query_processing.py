@@ -129,6 +129,7 @@ async def plan_research_outline(
         cost_callback
     )
 
+    logger.info(f"in function plan_research_outline -- parent_query: {parent_query},query: {query}, sub_queries: {sub_queries}")
     return sub_queries
 
 async def generate_pubmed_sub_queries(
