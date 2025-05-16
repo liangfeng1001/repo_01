@@ -275,6 +275,13 @@ class ResearchConductor:
         
         # If this is not part of a sub researcher, add original query to research for better results
         if self.researcher.report_type != "subtopic_report":
+            mark_query = "\n" + "".join([f"## {q.strip()}\n" for q in sub_queries])
+            await stream_output(
+                "logs",
+                "mark_query",
+                f"# {query}{mark_query}",
+                self.researcher.websocket,
+            )
             sub_queries.append(query)
 
         if self.researcher.verbose:
@@ -535,7 +542,7 @@ class ResearchConductor:
                     classified_items['tavily'].append(parsed_block)
 
             # 移除空分类
-            classified_items = {key: value for key, value in classified_items.items() if value}
+            # classified_items = {key: value for key, value in classified_items.items() if value}
 
             # 转换为JSON字符串
             classified_json = json.dumps(classified_items, ensure_ascii=False, indent=2)

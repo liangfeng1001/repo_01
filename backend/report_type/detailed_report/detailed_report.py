@@ -4,6 +4,7 @@ from fastapi import WebSocket
 import logging
 
 from gpt_researcher import GPTResearcher
+from gpt_researcher.actions.utils import stream_output
 
 # 配置日志
 logging.basicConfig(
@@ -166,4 +167,17 @@ class DetailedReport:
         conclusion_with_references = self.gpt_researcher.add_references(
             conclusion, self.gpt_researcher.visited_urls)
         report = f"{introduction}\n\n{toc}\n\n{report_body}\n\n{conclusion_with_references}"
+        
+        # 使用 stream_output 函数流式输出报告内容
+        if self.websocket:
+            try:
+                await stream_output(
+                    "logs",
+                    "report",
+                    report,
+                    self.websocket
+                )
+            except Exception as e:
+                logger.error(f"Error streaming report content: {str(e)}")
+        
         return report

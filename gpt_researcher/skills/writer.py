@@ -198,7 +198,7 @@ class ReportGenerator:
                 self.researcher.websocket,
             )
         # subtopics输出成markdown格式
-        extracted_tasks = "\n".join([f"- {subtopic.task}" for subtopic in subtopics.subtopics])
+        extracted_tasks = "\n".join([f"## {subtopic.task}" for subtopic in subtopics.subtopics]) + "\n"
         
         await stream_output(
             "logs",
