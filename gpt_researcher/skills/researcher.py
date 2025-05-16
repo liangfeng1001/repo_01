@@ -450,48 +450,48 @@ class ResearchConductor:
                         'score': total_score
                     })
                 
-            # 记录排序前的得分情况
-            self.logger.info("\n排序前的得分情况:")
-            for idx, item in enumerate(all_scored_items):
-                try:
-                    self.logger.info(f"  item {idx + 1}:")
-                    self.logger.info(f"  url_source: {item['source']}")
-                    self.logger.info(f"  journal_name: {item['journal_name']}")
-                    self.logger.info(f"  source_type: {item['source_type']}")
-                    # 处理标题中的特殊字符
-                    title = item['title'].encode('utf-8', errors='ignore').decode('utf-8')
-                    self.logger.info(f"  标题: {title}")
-                    self.logger.info(f"  内容长度: {len(item['content'])}")
-                    self.logger.info(f"  相似度得分: {item['similarity_score']:.4f}")
-                    self.logger.info(f"  上下文排名得分: {item['context_rank_score']:.4f}")
-                    self.logger.info(f"  来源权威性得分: {item['source_authority_score']:.4f}")
-                    self.logger.info(f"  影响因子: {item['impact_factor']}")
-                    self.logger.info(f"  标准化影响因子得分: {item['normalized_impact_factor']:.4f}")
-                    self.logger.info(f"  总分: {item['score']:.4f}")
-                    self.logger.info("-" * 50)
-                except Exception as e:
-                    self.logger.warning(f"记录项目 {idx + 1} 时出错: {str(e)}")
-                    continue
+            # # 记录排序前的得分情况
+            # self.logger.info("\n排序前的得分情况:")
+            # for idx, item in enumerate(all_scored_items):
+            #     try:
+            #         self.logger.info(f"  item {idx + 1}:")
+            #         self.logger.info(f"  url_source: {item['source']}")
+            #         self.logger.info(f"  journal_name: {item['journal_name']}")
+            #         self.logger.info(f"  source_type: {item['source_type']}")
+            #         # 处理标题中的特殊字符
+            #         title = item['title'].encode('utf-8', errors='ignore').decode('utf-8')
+            #         self.logger.info(f"  标题: {title}")
+            #         self.logger.info(f"  内容长度: {len(item['content'])}")
+            #         self.logger.info(f"  相似度得分: {item['similarity_score']:.4f}")
+            #         self.logger.info(f"  上下文排名得分: {item['context_rank_score']:.4f}")
+            #         self.logger.info(f"  来源权威性得分: {item['source_authority_score']:.4f}")
+            #         self.logger.info(f"  影响因子: {item['impact_factor']}")
+            #         self.logger.info(f"  标准化影响因子得分: {item['normalized_impact_factor']:.4f}")
+            #         self.logger.info(f"  总分: {item['score']:.4f}")
+            #         self.logger.info("-" * 50)
+            #     except Exception as e:
+            #         self.logger.warning(f"记录项目 {idx + 1} 时出错: {str(e)}")
+            #         continue
             
             # 按得分排序
             all_scored_items.sort(key=lambda x: x['score'], reverse=True)
             
             # 记录排序后的结果
-            self.logger.info("\n排序后的结果:")
-            for idx, item in enumerate(all_scored_items):
-                self.logger.info(f"排名 {idx + 1}:")
-                self.logger.info(f"  来源: {item['source']}")
-                self.logger.info(f"  期刊名称: {item['journal_name']}")
-                self.logger.info(f"  来源类型: {item['source_type']}")
-                self.logger.info(f"  标题: {item['title']}")
-                self.logger.info(f"  内容长度: {len(item['content'])}")
-                self.logger.info(f"  相似度得分: {item['similarity_score']:.4f}")
-                self.logger.info(f"  上下文排名得分: {item['context_rank_score']:.4f}")
-                self.logger.info(f"  来源权威性得分: {item['source_authority_score']:.4f}")
-                self.logger.info(f"  影响因子: {item['impact_factor']}")
-                self.logger.info(f"  标准化影响因子得分: {item['normalized_impact_factor']:.4f}")
-                self.logger.info(f"  总分: {item['score']:.4f}")
-                self.logger.info("-" * 50)
+            # self.logger.info("\n排序后的结果:")
+            # for idx, item in enumerate(all_scored_items):
+            #     self.logger.info(f"排名 {idx + 1}:")
+            #     self.logger.info(f"  来源: {item['source']}")
+            #     self.logger.info(f"  期刊名称: {item['journal_name']}")
+            #     self.logger.info(f"  来源类型: {item['source_type']}")
+            #     self.logger.info(f"  标题: {item['title']}")
+            #     self.logger.info(f"  内容长度: {len(item['content'])}")
+            #     self.logger.info(f"  相似度得分: {item['similarity_score']:.4f}")
+            #     self.logger.info(f"  上下文排名得分: {item['context_rank_score']:.4f}")
+            #     self.logger.info(f"  来源权威性得分: {item['source_authority_score']:.4f}")
+            #     self.logger.info(f"  影响因子: {item['impact_factor']}")
+            #     self.logger.info(f"  标准化影响因子得分: {item['normalized_impact_factor']:.4f}")
+            #     self.logger.info(f"  总分: {item['score']:.4f}")
+            #     self.logger.info("-" * 50)
             
             # 设置阈值或取前N个结果
             threshold = 0.4  # 默认阈值
