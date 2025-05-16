@@ -129,6 +129,7 @@ async def run_agent(task, report_type, report_source, source_urls, document_urls
     
     # Initialize researcher based on report type
     if report_type == "multi_agents":
+        logger.info(f"use multi_agents")
         report = await run_research_task(
             query=task,  # 使用翻译后的查询
             websocket=logs_handler,
@@ -139,6 +140,7 @@ async def run_agent(task, report_type, report_source, source_urls, document_urls
         report = report.get("report", "")
         
     elif report_type == ReportType.DetailedReport.value:
+        logger.info(f"use detail_agents")
         researcher = DetailedReport(
             query=task,  # 使用翻译后的查询
             query_domains=query_domains,
