@@ -128,8 +128,24 @@ class DetailedReport:
             tone=self.tone,
         )
 
+        # 从主查询传递累积的分类结果
+        if hasattr(self.gpt_researcher, 'accumulated_classified_results'):
+            subtopic_assistant.accumulated_classified_results = self.gpt_researcher.accumulated_classified_results
+            logger.info("Passed accumulated_classified_results from main query to subtopic researcher")
+        else:
+            logger.error("No accumulated_classified_results found in main query")
+            raise AttributeError("accumulated_classified_results not found in main query")
+
         subtopic_assistant.context = list(set(self.global_context))
         await subtopic_assistant.conduct_research()
+
+        # 将子主题更新后的accumulated_classified_results传回主查询
+        if hasattr(subtopic_assistant, 'accumulated_classified_results'):
+            self.gpt_researcher.accumulated_classified_results = subtopic_assistant.accumulated_classified_results
+            logger.info("Updated main query's accumulated_classified_results with subtopic results")
+            logger.info("Current accumulated results in main query:")
+            for category in self.gpt_researcher.accumulated_classified_results:
+                logger.info(f"{category}: {len(self.gpt_researcher.accumulated_classified_results[category])} items")
 
         draft_section_titles = await subtopic_assistant.get_draft_section_titles(current_subtopic_task)
 

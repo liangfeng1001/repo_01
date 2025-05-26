@@ -31,7 +31,6 @@ class ResearchConductor:
         self.logger = logging.getLogger('research')
         self.json_handler = get_json_handler()
 
-
     async def plan_research(self, query, query_domains=None):
         self.logger.info(f"Planning research for query: {query}")
         if query_domains:
@@ -69,11 +68,25 @@ class ResearchConductor:
 
     async def conduct_research(self):
         """Runs the GPT Researcher to conduct research"""
-        
         if self.json_handler:
             self.json_handler.update_content("query", self.researcher.query)
         
         self.logger.info(f"Starting research for query: {self.researcher.query}")
+        self.logger.info(f"Report type: {self.researcher.report_type}")
+        
+        # 如果是主查询（非子主题报告），重置结果
+        if self.researcher.report_type != "subtopic_report":
+            self.logger.info(f"Main query detected, resetting accumulated results")
+            self.researcher.accumulated_classified_results = {
+                "arxiv": [],
+                "pubmed": [],
+                "tavily": []
+            }
+        else:
+            self.logger.info(f"Subtopic report detected, using existing accumulated results")
+            if not hasattr(self.researcher, 'accumulated_classified_results'):
+                self.logger.error("No existing accumulated results found for subtopic report")
+                raise AttributeError("accumulated_classified_results not found for subtopic report")
         
         # Reset visited_urls and source_urls at the start of each research task
         self.researcher.visited_urls.clear()
@@ -108,7 +121,7 @@ class ResearchConductor:
 
         elif self.researcher.report_source == ReportSource.Web.value:
             self.logger.info("Using web search")
-            research_data = await self._get_context_by_web_search(self.researcher.query, [], self.researcher.query_domains)
+            research_data = await self._get_context_by_web_search(self.researcher.query, [], self.researcher.query_domains, self.researcher.accumulated_classified_results)
 
         # ... rest of the conditions ...
         elif self.researcher.report_source == ReportSource.Local.value:
@@ -251,7 +264,7 @@ class ResearchConductor:
         }
         return source_scores.get(source.lower(), 0)
 
-    async def _get_context_by_web_search(self, query, scraped_data: list = [], query_domains: list = []):
+    async def _get_context_by_web_search(self, query, scraped_data: list = [], query_domains: list = [], accumulated_classified_results: dict = None):
         """
         Generates the context for the research task by searching the query and scraping the results
         Returns:
@@ -450,7 +463,7 @@ class ResearchConductor:
                         'score': total_score
                     })
                 
-            # # 记录排序前的得分情况
+            # 记录排序前的得分情况
             # self.logger.info("\n排序前的得分情况:")
             # for idx, item in enumerate(all_scored_items):
             #     try:
@@ -476,7 +489,7 @@ class ResearchConductor:
             # 按得分排序
             all_scored_items.sort(key=lambda x: x['score'], reverse=True)
             
-            # 记录排序后的结果
+            # # 记录排序后的结果
             # self.logger.info("\n排序后的结果:")
             # for idx, item in enumerate(all_scored_items):
             #     self.logger.info(f"排名 {idx + 1}:")
@@ -540,12 +553,31 @@ class ResearchConductor:
                     classified_items['arxiv'].append(parsed_block)
                 else:
                     classified_items['tavily'].append(parsed_block)
+            
+            accumulated_classified_results = accumulated_classified_results
+            # 更新累积的分类结果，保持分类结构
+            self.logger.info("Updating accumulated results")
+            for category in classified_items:
+                try:
+                    # 检查是否有重复的source
+                    existing_sources = {item['source'] for item in self.researcher.accumulated_classified_results[category]}
+                    # 只添加新的source
+                    new_items = [item for item in classified_items[category] if item['source'] not in existing_sources]
+                    if new_items:
+                        self.logger.info(f"Adding {len(new_items)} new items to {category}")
+                        self.researcher.accumulated_classified_results[category].extend(new_items)
+                except Exception as e:
+                    self.logger.error(f"Error processing category {category}: {str(e)}")
+                    continue
 
-            # 移除空分类
-            # classified_items = {key: value for key, value in classified_items.items() if value}
+            # 记录当前累积的结果
+            self.logger.info("Current accumulated results:")
+            for category in self.researcher.accumulated_classified_results:
+                self.logger.info(f"{category}: {len(self.researcher.accumulated_classified_results[category])} items")
 
             # 转换为JSON字符串
-            classified_json = json.dumps(classified_items, ensure_ascii=False, indent=2)
+            self.logger.info("Converting to JSON")
+            classified_json = json.dumps(self.researcher.accumulated_classified_results, ensure_ascii=False, indent=2)
             self.logger.info(f"分类结果: {classified_json}")
             await stream_output(
                     "logs", "subquery_context_window", f"{classified_json}", self.researcher.websocket
