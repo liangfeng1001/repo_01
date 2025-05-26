@@ -138,47 +138,86 @@ async def generate_pubmed_sub_queries(
     cost_callback: callable = None
 ) -> List[str]:
     """
-    Generate specialized sub-queries for PubMed based on medical terms and basic search strategies
+    Generate specialized sub-queries for PubMed based on medical terms and search strategies
     
     Args:
         query: Original query
         cfg: Configuration object
         cost_callback: Callback for cost calculation
-    
+        
     Returns:
-        A list of sub-queries in PubMed search format
+        A list of sub-queries in PubMed search format with proper date filters when applicable
     """
     logger.info(f"Generating PubMed sub-queries for query: {query}")
     
-    prompt = f"""As a medical literature search expert, please analyze the following topic and generate simple search queries:
+    # 导入正则表达式库
+    import re
+    
+    # 检查查询是否包含年份范围
+    date_pattern = r'(\d{4})(?:/|\s*-\s*)(\d{4})'
+    date_match = re.search(date_pattern, query)
+    date_filter = ""
+    
+    if date_match:
+        start_year = date_match.group(1)
+        end_year = date_match.group(2)
+        # 创建标准的 PubMed 日期过滤器格式
+        date_filter = f'"{start_year}/01/01"[PDAT] : "{end_year}/12/31"[PDAT]'
+        # 从查询中移除年份范围以避免重复
+        query = re.sub(date_pattern, '', query).strip()
+    
+    prompt = f"""As a medical literature search expert, please analyze the following topic and generate effective PubMed search queries:
+    
     Topic: {query}
     
     Requirements:
-    1. Extract the main medical term(s) from the topic
-    2. For each medical term, add ONE most relevant related term
-    3. Keep each query short and simple (2-3 words maximum)
-    4. Use standard Boolean operators (AND) in uppercase
-    5. DO NOT use any special characters or field tags
+    1. Extract the main medical concepts and their relationships from the topic
+    2. Create 3-5 search queries that capture different aspects of the topic
+    3. Balance between specificity and sensitivity:
+       - For focused questions, create broader queries to ensure sufficient results
+       - For broad questions, create more specific queries to improve relevance
+    4. Include relevant synonyms, related terms, or alternative phrasings when appropriate
+    5. Follow these PubMed query formatting rules:
+       - Use Boolean operators (AND, OR) in uppercase when needed
+       - Avoid using more than 3 AND operators in a single query
+       - Do not start or end queries with Boolean operators
+       - Avoid excessive length that would make queries too restrictive
+       - DO NOT include any date ranges or years in the queries
+    6. Query length should be appropriate to the complexity of the topic:
+       - Simple topics: 2-4 terms
+       - Complex topics: 4-8 terms
     
-    Example:
-    Input: "What are the latest treatments for Chronic Myeloid Leukemia?"
-    Output: ["Withdrawal Chronic Myeloid Leukemia", "Treatment Chronic Myeloid Leukemia"]
+    Examples:
     
-    Return a valid JSON array of strings:
-    [
-        "term1 AND term2",
-        "term3 AND term4"
+    For a broad question:
+    Input: "What are the latest treatments for cancer?"
+    Output: [
+        "cancer treatment recent",
+        "cancer therapy advances",
+        "novel cancer interventions",
+        "cancer AND therapeutic approaches"
     ]
+    
+    For a focused question:
+    Input: "Is adalimumab effective for treating Crohn's disease?"
+    Output: [
+        "adalimumab Crohn disease efficacy",
+        "adalimumab inflammatory bowel disease",
+        "anti-TNF Crohn treatment",
+        "Crohn disease biological therapy"
+    ]
+    
+    Return a valid JSON array of strings containing 3-5 different search queries.
     """
     
     try:
         response = await create_chat_completion(
             model=cfg.smart_llm_model,
             messages=[
-                {"role": "system", "content": "You are a medical search expert who creates simple, effective search strings. Focus on extracting medical terms and adding one relevant term. Keep queries short and clear."},
+                {"role": "system", "content": "You are a medical search expert who creates effective PubMed search strings. Balance specificity and sensitivity based on the query's focus. Follow PubMed conventions and avoid overly complex queries."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.4,
+            temperature=0.5,
             llm_provider=cfg.smart_llm_provider,
             websocket=None,
             max_tokens=cfg.smart_token_limit,
@@ -194,14 +233,34 @@ async def generate_pubmed_sub_queries(
             response = response[:-3]
         response = response.strip()
         
-        # 使用 json_repair.loads 替代 json.loads
+        # 使用 json_repair.loads 解析 JSON
         sub_queries = json_repair.loads(response)
+        
+        # 如果存在日期过滤器，添加到所有查询中
+        if date_filter:
+            sub_queries = [f"({query}) AND {date_filter}" for query in sub_queries]
+            
         logger.info(f"Generated PubMed sub-queries: {sub_queries}")
         return sub_queries
+        
     except Exception as e:
         logger.error(f"Error generating PubMed sub-queries: {e}")
         logger.error(f"Original response: {response}")
         
-        # If parsing fails, return a simplified version of the original query
-        simplified_query = query.replace(" ", " AND ")
-        return [simplified_query]
+        # 如果解析失败，创建一个简单的回退查询
+        try:
+            # 提取原始查询中的关键词
+            key_terms = " ".join([word for word in query.split() if len(word) > 3])
+            simplified_query = key_terms[:100]  # 限制长度
+            
+            # 如果存在日期过滤器，添加到简化查询中
+            if date_filter:
+                simplified_query = f"({simplified_query}) AND {date_filter}"
+                
+            return [simplified_query]
+        except:
+            # 最终回退方案
+            fallback_query = query.replace(" ", " AND ")
+            if date_filter:
+                fallback_query = f"({fallback_query}) AND {date_filter}"
+            return [fallback_query]
