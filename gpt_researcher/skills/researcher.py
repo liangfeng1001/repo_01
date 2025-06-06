@@ -75,6 +75,7 @@ class ResearchConductor:
         self.logger.info(f"Report type: {self.researcher.report_type}")
         
         # 如果是主查询（非子主题报告），重置结果
+        ## 测试提交
         if self.researcher.report_type != "subtopic_report":
             self.logger.info(f"Main query detected, resetting accumulated results")
             self.researcher.accumulated_classified_results = {
