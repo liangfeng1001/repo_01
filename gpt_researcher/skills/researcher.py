@@ -592,13 +592,7 @@ class ResearchConductor:
             # 测试用：
             self.logger.info(f'本次的影响因子最低要求是：{min_jif}')
             self.logger.info(f'总共{len(all_scored_items)}个被收录的文献')
-            # 测试分支
-            # 测试分支2222
-            puchu = []
-            print(puchu)
 
-            ## 测试 44444
-            print("*********************")
 
 
             # 按得分排序
