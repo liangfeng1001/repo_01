@@ -11,7 +11,6 @@ python-multipart
 markdown
 langchain
 langchain_community
-langchain-openai
 tiktoken
 gpt-researcher
 arxiv
@@ -28,7 +27,36 @@ unstructured
 json_repair
 json5
 loguru
+# langchain-core==0.2.3
+fastapi>=0.110.0
+uvicorn>=0.29.0
+pytest==8.2.0
+pytest-asyncio==0.23.5
+langchain-openai==0.1.7
+langchain-vectorstores
+# jia geng
+langchain-anthropic==0.3.12
+langchain-cohere==0.4.4
+langchain-core==0.3.58
+langchain-google-genai==2.1.4
+langchain-google-vertexai==2.0.21
+langchain-openai==0.3.16
+langchain-text-splitters==0.3.8
+langchain-gigachat==0.3.10
+langchain-fireworks==0.3.0
+langchain-ollama==0.3.2
+langchain-groq==0.3.2
+langchain-aws==0.2.22
+langchain-xai==0.2.3
+langchain-together==0.3.0
+langchain-mistralai==0.2.10
+langchain-huggingface==0.1.2
+
 
 # uncomment for testing
 # pytest
 # pytest-asyncio
+
+
+# biorxiv_retriever
+# pandas

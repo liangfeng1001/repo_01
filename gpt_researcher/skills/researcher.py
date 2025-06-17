@@ -23,6 +23,9 @@ import requests
 import pandas as pd
 from ..retrievers import PubmedDianSearch
 
+
+authors_t = 1
+
 class ResearchConductor:
     """Manages and coordinates the research process."""
 
@@ -75,14 +78,20 @@ class ResearchConductor:
         self.logger.info(f"Report type: {self.researcher.report_type}")
         
         # 如果是主查询（非子主题报告），重置结果
-        ## 测试提交
         if self.researcher.report_type != "subtopic_report":
             self.logger.info(f"Main query detected, resetting accumulated results")
-            self.researcher.accumulated_classified_results = {
-                "arxiv": [],
-                "pubmed": [],
-                "tavily": []
-            }
+
+            # self.researcher.accumulated_classified_results = {
+            #     "arxiv": [],
+            #     "pubmed": [],
+            #     "tavily": []
+            # }
+
+            #todo 修+（试）
+            self.researcher.accumulated_classified_results = {}
+
+
+
         else:
             self.logger.info(f"Subtopic report detected, using existing accumulated results")
             if not hasattr(self.researcher, 'accumulated_classified_results'):
@@ -308,6 +317,9 @@ class ResearchConductor:
                 sub_queries,
             )
 
+        # 测试用：
+        self.logger.info(f"全部的查询query的内容是：{sub_queries}")
+
         # 获取原始搜索结果
         context = await asyncio.gather(
             *[
@@ -315,7 +327,14 @@ class ResearchConductor:
                 for sub_query in sub_queries
             ]
         )
-        
+
+
+        # 加+
+        min_jif = self.researcher.min_jif_score  # 需添加最低期待影响因子得分的字段
+
+        #todo 修+
+        source_type_keys = ["tavily", "arxiv", "pubmed"]  # 定义来源类型键
+
         # 记录原始搜索结果
         self.logger.info("raw search results:")
         for idx, contents in enumerate(context):
@@ -329,6 +348,7 @@ class ResearchConductor:
         # 处理所有搜索结果并计算得分
         try:
             all_scored_items = []
+
             # 直接遍历context列表
             for idx, contents in enumerate(context):
                 if not contents:
@@ -336,12 +356,12 @@ class ResearchConductor:
                 
                 # 将内容按块分割
                 content_blocks = contents.split("\n\n")
-                
+
                 # 遍历该查询的所有内容块
                 for block in content_blocks:
                     if not block.strip():
                         continue
-                        
+
                     # 解析块内容
                     source_match = re.search(r'^Source: (https?://[^\s]+)', block, re.M)
                     title_match = re.search(r'Title: (.+)', block)
@@ -353,29 +373,41 @@ class ResearchConductor:
                     url = source_match.group(1)
                     title = title_match.group(1).strip()
                     content_text = content_match.group(1).strip()
-                    
-                    # 确定来源类型
-                    source_type = "tavily"  # 默认类型
-                    
+
+
+
+                    # 确定来源默认类型
+                    source_type = source_type_keys[0]
+
                     # 从内容块中获取检索器类型
                     retriever_type_match = re.search(r'RetrieverType: (\w+)', block)
                     if retriever_type_match:
                         source_type = retriever_type_match.group(1)
-                        self.logger.info(f"get source_type from content_block: {source_type}")
+                        self.logger.info(f"get source_type from content_block: {source_type}")  # 打印检索器类型
                     else:
                         # 从scraped_data中获取检索器类型
                         for item in scraped_data:
-                            if item.get('url') == url and 'retriever_type' in item:
-                                source_type = item['retriever_type']
+                            if item.get('url') == url and 'retriever_type' in item:  # 检查URL和检索器类型是否存在
+                                source_type = item['retriever_type']  # 获取检索器类型
                                 self.logger.info(f"get source_type from scraped_data: {source_type}")
                                 break
-                    
+
+                    # 修+
+                    # 检查来源类型是否有效
+                    if source_type not in source_type_keys:  # 如果来源类型无效，则跳过或者强制修改为默认类型
+                        # continue
+                        # 强制修改为默认类型
+                        source_type = source_type_keys[0]  # 默认类型
+                        self.logger.info(
+                            f"Invalid source_type: {source_type}. Forcing to default: {source_type_keys[0]}")
+
+
                     # 如果来源类型是tavily，根据URL特征进行二次分类
-                    if source_type == "tavily":
-                        if 'arxiv' in url.lower():
+                    if source_type == source_type_keys[0]: # 修+
+                        if 'arxiv' in url.lower():  # 如果URL包含arxiv，则将来源类型改为arxiv
                             source_type = "arxiv"
                             self.logger.info("according to url, change source_type from tavily to arxiv")
-                        elif 'ncbi' in url.lower() or 'pubmed' in url.lower():
+                        elif 'ncbi' in url.lower() or 'pubmed' in url.lower():  # 如果URL包含ncbi或pubmed，则将来源类型改为pubmed
                             source_type = "pubmed"
                             self.logger.info("according to url, change source_type from tavily to pubmed")
 
@@ -389,14 +421,22 @@ class ResearchConductor:
                     content_similarity = await self._calculate_query_similarity(query, sub_queries[idx])  
 
                     impact_factor = 0
+
+
+                    self.logger.info(f'our min_jif_score is {min_jif}')
+
+
                     journal_name = ""
                     if source_type == "pubmed" or source_type == "tavily":
                         # 提取期刊信息
                         journal_info = await self._extract_journal_info_from_url(url)
                         journal_name = journal_info.get("journal_name", "")
+
+                        self.logger.info(f"our journal_name is <<{journal_name}>> in this time")
                         # 查找期刊影响因子
                         if journal_df is not None and journal_name:
                             try:
+                                self.logger.info("We are starting to search for journal factors ")
                                 # 标准化查询的期刊名称
                                 normalized_journal_name = await self._normalize_journal_name(journal_name)
 
@@ -406,9 +446,14 @@ class ResearchConductor:
                                     lambda x: str(x).replace(' - ', '-').replace(' And ', ' & ').replace(' and ', ' & ').replace('&amp;', '&').replace('&AMP;', '&') if not pd.isna(x) else ""
                                 )
                                 journal_match = journal_df[journal_df['NormalizedName'].str.upper() == normalized_journal_name.upper()]
-                                
+
+
+
                                 # 如果没有精确匹配，尝试部分匹配
                                 if journal_match.empty:
+
+                                    self.logger.info("Liang__is trying》》》》 journal_math is also empty")
+
                                     for _, row in journal_df.iterrows():
                                         normalized_db_name = row['NormalizedName'].upper()
                                         
@@ -427,16 +472,69 @@ class ResearchConductor:
                                 
                                 # 如果有ISSN匹配
                                 if journal_match.empty and 'issn' in journal_info:
+
+                                    self.logger.info("期刊匹配依然没有成功！！")
+
                                     issn = journal_info['issn']
                                     journal_match = journal_df[(journal_df['ISSN'] == issn) | (journal_df['EISSN'] == issn)]
                                 
                                 if not journal_match.empty:
+
                                     impact_factor = float(journal_match.iloc[0]['JIF']) if 'JIF' in journal_match.columns and not pd.isna(journal_match.iloc[0]['JIF']) else 0
                                     self.logger.info(f"期刊 '{journal_name}' 的影响因子 (JIF): {impact_factor}")
                             except Exception as e:
                                 self.logger.warning(f"期刊影响因子查询错误: {e}")
 
-                    # 标准化影响因子得分到0-1范围
+
+                    if impact_factor < min_jif:  # 如果影响因子小于最低期待影响因子，则跳过
+                       continue
+
+
+                    # 获取对应文献的发表年、卷期、页码（若没有，只给年份就好）
+                    published_date = ""  # 初始化发表日期
+                    authors = ""  # 初始化作者
+                    vol = ""  # 初始化卷号
+                    pagination = ""  # 初始化页码
+                    if source_type == source_type_keys[2]:  # 如果来源类型是pubmed
+
+                        published_date_match = re.search(r'Published Date: (.+)', block)  # 匹配发表日期
+                        vol_match = re.search(r'Volume: (.+)', block)  # 匹配卷号
+                        pagination_match = re.search(r'Pagination: (.+)', block)  # 匹配页码
+                        authors_match = re.search(r'Authors: (.+)', block)  # 匹配作者
+                        # 提取信息
+                        if authors_match:
+                            self.logger.info("作者匹配了！！")
+                            authors = authors_match.group(1).strip()  # 获取作者
+                        if pagination_match:
+                            self.logger.info("页码匹配了！！")
+                            pagination = pagination_match.group(1).strip()  # 获取页码
+                        if vol_match:
+                            self.logger.info("卷号匹配了！！")
+                            vol = vol_match.group(1).strip()  # 获取卷号
+                        if published_date_match:
+                            self.logger.info("日期匹配了！！")
+                            published = published_date_match.group(1).strip()  # 获取发表日期
+                            # published_date = published.split(" ")[0] # 提取发表日期
+                            published_date = published[:4]
+
+                    elif source_type == source_type_keys[1]:  # 如果来源类型是arxiv
+                        arxiv_info = self._extract_arxiv_info_from_url(url)  # 提取arxiv信息
+                        published_date = arxiv_info.get("published_date", "")  # 获取发表日期
+                        # # 检查发表日期是否在2020年之后
+                        # if published_date and int(published_date.split(".")[0]) < 2020:  # 检查发表日期是否在2020年之后
+                        #     continue  # 如果不是，则跳过
+                        authors = arxiv_info.get("arxiv_id", "Unknown ID")  # 获取作者（先用ID代替）
+
+
+                    if vol:
+                        if pagination:  # 如果有卷号和页码
+                            vol_pagination = f"Vol.{vol}:{pagination}"  # 拼接卷号和页码
+                        else:  # 如果只有卷号
+                            vol_pagination = f"Vol.{vol}"  # 拼接卷号
+                    else:
+                        vol_pagination = ""
+
+                        # 标准化影响因子得分到0-1范围
                     # 假设最高影响因子为100（可根据实际情况调整）
                     max_impact_factor = 503.1
                     normalized_impact_factor = min(impact_factor / max_impact_factor, 1.0)
@@ -461,7 +559,11 @@ class ResearchConductor:
                         'source_authority_score': source_authority_score,
                         'impact_factor': impact_factor,
                         'normalized_impact_factor': normalized_impact_factor,
-                        'score': total_score
+                        'score': total_score,
+                        'published_date': published_date,   # 发表日期
+                        'authors': authors,   # 作者
+                        'vol_pagination': vol_pagination,   # 卷号+页码
+
                     })
                 
             # 记录排序前的得分情况
@@ -486,10 +588,31 @@ class ResearchConductor:
             #     except Exception as e:
             #         self.logger.warning(f"记录项目 {idx + 1} 时出错: {str(e)}")
             #         continue
-            
+
+            # 测试用：
+            self.logger.info(f'本次的影响因子最低要求是：{min_jif}')
+            self.logger.info(f'总共{len(all_scored_items)}个被收录的文献')
+            # 测试分支
+
             # 按得分排序
             all_scored_items.sort(key=lambda x: x['score'], reverse=True)
-            
+
+            # self.logger.info(f'展示被收录采纳的文献信息：：')
+            # for item in all_scored_items:
+            #     try:
+            #         self.logger.info(f"  item: {item['title']}")
+            #         self.logger.info(f"  source: {item['source']}")
+            #         self.logger.info(f"  journal_name: {item['journal_name']}")
+            #         self.logger.info(f"  impact_factor: {item['impact_factor']}")
+            #         self.logger.info(f"  source_type: {item['source_type']}")
+            #         self.logger.info(f"  authors: {item['authors']}")
+            #         self.logger.info(f"  published_date: {item['published_date']}")
+            #         self.logger.info(f"  vol_pagination: {item['vol_pagination']}")
+            #         self.logger.info(f'------------------------')
+            #     except Exception as e:
+            #         self.logger.warning(f"记录项目时出错: {str(e)}")
+            #         continue
+
             # # 记录排序后的结果
             # self.logger.info("\n排序后的结果:")
             # for idx, item in enumerate(all_scored_items):
@@ -533,11 +656,11 @@ class ResearchConductor:
                 formatted_context.append(formatted_block)
 
             # 将filtered_items转换为分类格式
-            classified_items = {
-                "arxiv": [],
-                "pubmed": [],
-                "tavily": []
-            }
+
+            #固定初始值格式：列表
+            initial_value = []  #
+
+            classified_items = {key: initial_value.copy() for key in source_type_keys}
 
             for item in filtered_items:
                 source = item['source']
@@ -545,41 +668,91 @@ class ResearchConductor:
                     "source": source,
                     "JournalName": item['journal_name'],
                     "title": item['title'],
-                    "content": item['content']
+                    "content": item['content'],
+                    # 加++
+                    'impact_factor': item['impact_factor'],
+                    'published_date': item.get('published_date', ''),  # 获取发布日期，如果不存在则默认为'',
+                    'authors': item.get('authors', ''),
+                    'vol_pagination': item.get("vol_pagination")
+
                 }
                 
-                if item['source_type'] == "pubmed":
-                    classified_items['pubmed'].append(parsed_block)
-                elif item['source_type'] == "arxiv":
-                    classified_items['arxiv'].append(parsed_block)
-                else:
-                    classified_items['tavily'].append(parsed_block)
+                # if item['source_type'] == "pubmed":
+                #     classified_items['pubmed'].append(parsed_block)
+                # elif item['source_type'] == "arxiv":
+                #     classified_items['arxiv'].append(parsed_block)
+                # else:
+                #     classified_items['tavily'].append(parsed_block)
+
+                #todo 修+
+                #检查来源类型并添加到对应的分类中
+                classified_items[item['source_type']].append(parsed_block)
             
-            accumulated_classified_results = accumulated_classified_results
-            # 更新累积的分类结果，保持分类结构
+            # accumulated_classified_results = accumulated_classified_results
+            # # 更新累积的分类结果，保持分类结构
+            # self.logger.info("Updating accumulated results")
+            # for category in classified_items:
+            #     try:
+            #         # 检查是否有重复的source
+            #         existing_sources = {item['source'] for item in self.researcher.accumulated_classified_results[category]}
+            #         # 只添加新的source
+            #         new_items = [item for item in classified_items[category] if item['source'] not in existing_sources]
+            #         if new_items:
+            #             self.logger.info(f"Adding {len(new_items)} new items to {category}")
+            #             self.researcher.accumulated_classified_results[category].extend(new_items)
+            #     except Exception as e:
+            #         self.logger.error(f"Error processing category {category}: {str(e)}")
+            #         continue
+
+            #todo 修+(试)
+            #更新累积的分类结果，保持分类结构
             self.logger.info("Updating accumulated results")
-            for category in classified_items:
+
+            for category, context in classified_items.items():
+                if not self.researcher.accumulated_classified_results.setdefault(category, None):
+                    self.researcher.accumulated_classified_results[category] = []
+                le_s = len(self.researcher.accumulated_classified_results[category])
                 try:
-                    # 检查是否有重复的source
-                    existing_sources = {item['source'] for item in self.researcher.accumulated_classified_results[category]}
-                    # 只添加新的source
-                    new_items = [item for item in classified_items[category] if item['source'] not in existing_sources]
-                    if new_items:
-                        self.logger.info(f"Adding {len(new_items)} new items to {category}")
-                        self.researcher.accumulated_classified_results[category].extend(new_items)
+                    for item_dict in context:
+                        if len(self.researcher.accumulated_classified_results[category]) == 0:
+                            self.researcher.accumulated_classified_results[category].append(item_dict)
+                        else:
+                            inf = True
+                            for i in range(len(self.researcher.accumulated_classified_results[category])):
+                                if self.researcher.accumulated_classified_results[category][i]['source'] == item_dict[
+                                    'source']:
+                                    self.researcher.accumulated_classified_results[category][i]['content'] += item_dict[
+                                        'content']
+                                    inf = False
+                                    break
+                            if inf:
+                                self.researcher.accumulated_classified_results[category].append(item_dict)
+
+                    le_e = len(self.researcher.accumulated_classified_results[category])
+
+                    self.logger.info(f"Added {le_e - le_s} new items to {category}")
+
                 except Exception as e:
                     self.logger.error(f"Error processing category {category}: {str(e)}")
                     continue
+
 
             # 记录当前累积的结果
             self.logger.info("Current accumulated results:")
             for category in self.researcher.accumulated_classified_results:
                 self.logger.info(f"{category}: {len(self.researcher.accumulated_classified_results[category])} items")
 
+            # # 测试用：
+            # for category,item_list in self.researcher.accumulated_classified_results.items():
+            #     self.logger.info(f"展示搜索引擎{category}: {len(item_list)} items，获取的内容："+"\n\n")
+            #     for item in item_list:
+            #         self.logger.info(f"{item}"+"\n")
+
+
             # 转换为JSON字符串
             self.logger.info("Converting to JSON")
             classified_json = json.dumps(self.researcher.accumulated_classified_results, ensure_ascii=False, indent=2)
-            self.logger.info(f"分类结果: {classified_json}")
+            self.logger.info(f"分类结果: {classified_json}") #
             await stream_output(
                     "logs", "subquery_context_window", f"{classified_json}", self.researcher.websocket
                 )
@@ -647,13 +820,63 @@ class ResearchConductor:
                             retriever_type = item['retriever_type']
                             self.logger.info(f"从scraped_data中获取到检索器类型: {retriever_type}")
                             break
-                    
+
+
+                    # 加++
+                    # 从scraped_data中获取出版时间信息
+                    published_date = ""  # 默认出版时间为空
+                    for item in scraped_data:
+                        if item.get('url') == url and 'published_date' in item:
+                            published_date = item['published_date']
+                            self.logger.info(f"从scraped_data中获取到出版时间: {published_date}")
+                            break
+
+                    # 从scraped_data中获取作者信息
+                    authors = ""  # 默认作者为空
+                    for item in scraped_data:
+                        if item.get('url') == url and 'authors' in item:
+                            authors = item['authors']
+                            self.logger.info(f"从scraped_data中获取到作者信息: {authors}")
+                            break
+
+                    if authors and isinstance(authors, list):  # 如果作者信息存在,
+                        author_names = ""
+                        # 提取作者的名字
+                        for idx in range(len(authors)):
+                            if idx > authors_t - 1:
+                                break
+                            author_names += authors[idx] + ", "
+                        authors = author_names[:-2] + ", et al."
+                        self.logger.info(f"最后提取到的作者信息: {authors}")
+
+                    # 从scraped_data中获取卷号信息
+                    vol = ""  # 默认卷号为空
+                    for item in scraped_data:
+                        if item.get('url') == url and 'vol' in item:
+                            vol = item['vol']
+                            self.logger.info(f"从scraped_data中获取到卷号信息: {vol}")
+                            break
+
+                    # 从scraped_data中获取页码信息
+                    pagination = ""  # 默认页码为空
+                    for item in scraped_data:
+                        if item.get('url') == url and 'pagination' in item:
+                            pagination = item['pagination']
+                            self.logger.info(f"从scraped_data中获取到页码信息: {pagination}")
+                            break
+
+                    # 修++
                     # 构建新的内容块，包含检索器类型信息
                     processed_block = (
                         f"Source: {url}\n"
                         f"Title: {title}\n"
                         f"Content: {content_text}\n"
                         f"RetrieverType: {retriever_type}\n"
+                        f"Published Date: {published_date}\n"
+                        f"Volume: {vol}\n"
+                        f"Pagination: {pagination}\n"
+                        f"Authors: {authors}\n"
+
                     )
                     processed_blocks.append(processed_block)
                 
@@ -831,11 +1054,20 @@ class ResearchConductor:
             search_results = await asyncio.to_thread(
                 retriever.search, max_results=self.researcher.cfg.max_search_results_per_query
             )
-
+            self.logger.info(f"*****use retriever 2: {current_retriever_type}")
+            ceshi_c = 0
             # 为搜索结果添加检索器类型标识
             for result in search_results:
-                result['retriever_type'] = current_retriever_type
-                search_results_with_type.append(result)
+                result['retriever_type'] = current_retriever_type  # 添加检索器类型字段
+                search_results_with_type.append(result)  # 将结果添加到带检索器类型的结果列表中
+                ceshi_c += 1
+                self.logger.info(f"测试检索器：<{ceshi_c}>{current_retriever_type} \n 搜索结果：{result['href']} ")
+                # self.logger.info(f"测试pubmed搜索的字段是否存在：0：{result.get('href')}")
+                # self.logger.info(f"测试pubmed搜索的字段是否存在：1：{result.get('published')}")
+                # self.logger.info(f"测试pubmed搜索的字段是否存在：2：{result.get('pagination')}")
+                # self.logger.info(f"测试pubmed搜索的字段是否存在：3：{result.get('authors')}")
+                # self.logger.info(f"测试pubmed搜索的字段是否存在：4：{result.get('vol')}")
+                # self.logger.info(f"测试pubmed搜索的字段是否存在：5：{result.get('title')}")
 
             # 收集URL
             search_urls = [url.get("href") for url in search_results]
@@ -878,11 +1110,38 @@ class ResearchConductor:
         
         # 创建URL到检索器类型的映射
         url_to_type = {}
+
+        # 加++
+        # 初始化其他字段的映射
+        url_to_published_date = {}
+        url_to_authors = {}
+        url_to_vol = {}
+        url_to_pagination = {}
+
         for result in search_results_with_type:
             if 'href' in result and 'retriever_type' in result:
                 normalized_url = self._normalize_url(result['href'])
                 url_to_type[normalized_url] = result['retriever_type']
-                self.logger.info(f"添加URL映射: {normalized_url} -> {result['retriever_type']}")
+                self.logger.info(f"添加检索器<-URL映射:{result['retriever_type']} <-- {normalized_url}")
+
+                ## 加++修++
+                # if result['retriever_type'] == 'pubmed':  # 如果检索器类型是pubmed
+                self.logger.info(f"pubmed检索器类型, 开始处理pubmed字段")
+                if 'published' in result:  # 如果结果中包含发布日期字段
+                    url_to_published_date[normalized_url] = result['published']  # 添加到映射中
+                    self.logger.info(f"添加发布日期映射: {normalized_url} -> {result['published']}")
+                if 'authors' in result:  # 如果结果中包含作者字段
+                    url_to_authors[normalized_url] = result['authors']  # 添加到映射中
+                    self.logger.info(f"添加作者映射: {normalized_url} -> {result['authors']}")
+                if 'vol' in result:  # 如果结果中包含卷号字段
+                    url_to_vol[normalized_url] = result['vol']  # 添加到映射中
+                    self.logger.info(f"添加卷号映射: {normalized_url} -> {result['vol']}")
+                if 'pagination' in result:  # 如果结果中包含分页信息字段
+                    url_to_pagination[normalized_url] = result['pagination']  # 添加到映射中
+                    self.logger.info(f"添加分页信息映射: {normalized_url} -> {result['pagination']}")
+
+
+        self.logger.info(f"发布时间的映射字典的长度是：{len(url_to_published_date)}")
 
         # 为每个内容添加检索器类型信息
         for content in scraped_content:
@@ -907,6 +1166,22 @@ class ResearchConductor:
                     else:
                         content['retriever_type'] = 'tavily'
                         self.logger.info(f"根据URL特征判断为tavily")
+
+                ## 修++
+                # 为每个内容添加:1. 出版时间 published_date 2. 期刊卷号 vol  3. 作者信息 authors 4. 分页信息 pagination
+                if normalized_content_url in url_to_published_date:  # 如果URL在发布日期映射中
+                    content['published_date'] = url_to_published_date[normalized_content_url]  # 添加发布日期字段
+                    self.logger.info(f"添加发布日期: {content['published_date']}")
+                if normalized_content_url in url_to_authors:  # 如果URL在作者映射中
+                    content['authors'] = url_to_authors[normalized_content_url]  # 添加作者字段
+                    self.logger.info(f"添加作者: {content['authors']}")
+                if normalized_content_url in url_to_vol:  # 如果URL在卷号映射中
+                    content['vol'] = url_to_vol[normalized_content_url]  # 添加卷号字段
+                    self.logger.info(f"添加卷号: {content['vol']}")
+                if normalized_content_url in url_to_pagination:  # 如果URL在分页信息映射中
+                    content['pagination'] = url_to_pagination[normalized_content_url]  # 添加分页信息字段
+                    self.logger.info(f"添加分页信息: {content['pagination']}")
+
 
         if self.researcher.vector_store:
             self.researcher.vector_store.load(scraped_content)
@@ -1296,3 +1571,66 @@ class ResearchConductor:
         except Exception as e:
             self.logger.warning(f"Error fetching URL {url}: {e}")
             return None
+
+
+    #! 加++
+    def _extract_arxiv_info_from_url(self, url):
+        """从arXiv URL中提取信息"""
+        try:
+            arxiv_info = {}
+            # 从URL中提取arXiv ID
+            arxiv_id_match = re.search(r'arxiv\.org/pdf/(\d{4})\.(.*?)$', url)
+            if not arxiv_id_match:
+                arxiv_id_match = re.search(r'\.([^./]+)$', url)  # 匹配最后一个点后非斜杠内容
+                arxiv_id = arxiv_id_match.group(1)
+                if not arxiv_id_match:
+                    arxiv_id = "Unknown document"  # 无法提取arxiv ID，返回空字符串
+            else:
+                arxiv_id = arxiv_id_match.group(2)
+
+            arxiv_info["arxiv_id"] = arxiv_id
+            arxiv_info["published_date"] = self.extract_and_convert_arxiv_date(url)
+
+            return arxiv_info
+
+        except Exception as e:
+            self.logger.warning(f"Error extracting arXiv info from URL: {e}")
+
+    def extract_and_convert_arxiv_date(self,url: str) -> str:
+        """
+        从arXiv链接中提取日期标记并转换为期待日期格式
+
+        参数:
+        url (str): arXiv论文链接，如"http://arxiv.org/pdf/2410.15367v1"
+
+        返回:
+        str: 期待日期格式：如"2024.10"
+        """
+        # 使用正则表达式匹配arxiv ID中的日期部分（如2410或1704）
+        match = re.search(r'arxiv\.org/pdf/(\d{2})(\d{2})', url, re.IGNORECASE)
+        if not match:
+            match = re.search(r'\.(\d{2})(\d{2})', url[::-1])
+            if match:
+                digits_m = match.group(1)[::-1]
+                digits_y = match.group(2)[::-1]
+                digits = digits_y + digits_m  # 合并年和月
+            else:
+                return ""  # 无法提取日期，返回原URL
+        else:
+            # 提取年份和月份
+            digits_y, digits_m = match.groups()
+
+        # 将2位年份转换为4位（假设2000年之后）
+        year = int(digits_y)
+        year_full = 2000 + year if year < 50 else 1900 + year
+
+        # 构建期待日期
+        try:
+            # 确保月份在有效范围（1-12）
+            month = int(digits_m)
+            if 1 <= month <= 12:
+                return f"{year_full}.{month:02d}"  # 直接格式化字符串
+            else:
+                return f"{year_full}"  # 无效月份，只发年份
+        except ValueError:
+            return f"{year_full}-{digits_m.zfill(2)}"  # 异常处理，保持原始数字

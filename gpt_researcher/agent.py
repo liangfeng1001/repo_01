@@ -53,6 +53,8 @@ class GPTResearcher:
         max_subtopics: int = 5,
         log_handler=None,
         report_counter: int = 0,
+        # 加+
+        min_jif_score: float = 0.0,  # 用于过滤掉低JIF分数的结果
     ):
         self.query = query
         self.report_type = report_type
@@ -89,6 +91,8 @@ class GPTResearcher:
             self.cfg.embedding_provider, self.cfg.embedding_model, **self.cfg.embedding_kwargs
         )
         self.log_handler = log_handler
+        # 加+
+        self.min_jif_score = min_jif_score  # 初始化min_jif_score
 
         # Initialize components
         self.research_conductor: ResearchConductor = ResearchConductor(self)

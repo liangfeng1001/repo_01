@@ -16,7 +16,9 @@ class BasicReport:
         tone: Any,
         config_path: str,
         websocket: WebSocket,
-        headers=None
+        headers=None,
+        # 加+
+        min_jif_score: float = 0.0
     ):
         self.query = query
         self.query_domains = query_domains
@@ -28,6 +30,8 @@ class BasicReport:
         self.config_path = config_path
         self.websocket = websocket
         self.headers = headers or {}
+        # 加+
+        self.min_jif_score = min_jif_score
 
     async def run(self):
         # Initialize researcher
@@ -41,7 +45,9 @@ class BasicReport:
             tone=self.tone,
             config_path=self.config_path,
             websocket=self.websocket,
-            headers=self.headers
+            headers=self.headers,
+            # 加+
+            min_jif_score = self.min_jif_score
         )
 
         await researcher.conduct_research()

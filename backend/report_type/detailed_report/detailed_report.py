@@ -27,7 +27,9 @@ class DetailedReport:
         tone: Any = "",
         websocket: WebSocket = None,
         subtopics: List[Dict] = [],
-        headers: Optional[Dict] = None
+        headers: Optional[Dict] = None,
+        # 加+
+        min_jif_score: float = 0.0,
     ):
         self.query = query
         self.report_type = report_type
@@ -40,6 +42,8 @@ class DetailedReport:
         self.websocket = websocket
         self.subtopics = subtopics
         self.headers = headers or {}
+        # 加+
+        self.min_jif_score = min_jif_score  # 新增的字段，用于设置 JIF 分数的最低要求
 
         self.gpt_researcher = GPTResearcher(
             query=self.query,
@@ -52,6 +56,8 @@ class DetailedReport:
             tone=self.tone,
             websocket=self.websocket,
             headers=self.headers,
+            # 加+
+            min_jif_score=self.min_jif_score,
         )
         self.existing_headers: List[Dict] = []
         self.global_context: List[str] = []
@@ -126,6 +132,8 @@ class DetailedReport:
             agent=self.gpt_researcher.agent,
             role=self.gpt_researcher.role,
             tone=self.tone,
+            # 加+
+            min_jif_score=self.min_jif_score,  # 使用当前 DetailedReport 实例的 min_jif_score
         )
 
         # 从主查询传递累积的分类结果

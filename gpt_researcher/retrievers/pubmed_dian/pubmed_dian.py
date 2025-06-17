@@ -6,16 +6,37 @@
 
 """
 
+"""
+Date: added by cks at 20250610:
+Description: 
+    added new fields eg. [authors,published,vol,pagination],
+
+    eg like : 2021 Apr;115:574-590
+              --------|---|-------
+                  ⬆     ⬆     ⬆
+            published  vol  pagination
+
+    authors : Short author name list. eg : [McDaniels JM, Huckaby AC, Francis A].
+    published : The date the article was published. eg : [2006 Dec].
+    vol : Volume number of the journal. eg : [18].
+    pagination : The full pagination of the article. eg : [658-65].
+
+"""
+
 # libraries
 import os
 import requests
 import urllib.parse
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PubmedDianSearch():
     """
     PubmedDianSearch
     """
+
     def __init__(self, query, query_domains=None):
         """
         Initializes the PubmedDianSearch object
@@ -65,6 +86,17 @@ class PubmedDianSearch():
         print("PubmedDianSearch: Searching with query {0}...".format(self.query))
         """Useful for general internet search queries using PubmedDian."""
 
+        """
+
+        参数:
+            query: 搜索查询词。
+            max_results: 要返回的最大结果数。默认值为 7。
+        返回值:
+            一个搜索结果列表。每个结果是一个包含以下键的字典：
+            - title: 搜索结果的标题。
+            - href: 搜索结果的 URL。
+            - body: 搜索结果的正文。
+        """
 
         url = f"{self.api_domain}/api/v1/getPubMedDianSearch"
         params = {
@@ -98,11 +130,18 @@ class PubmedDianSearch():
                             "title": result["TI"],
                             "href": result["LINK"],
                             "body": result["AB"],
+                            "authors": result["AU"] if "AU" in result else "",
+                            "published": result["DP"] if "DP" in result else "",
+                            "vol": result["VI"] if "VI" in result else "",
+                            "pagination": result["PG"] if "PG" in result else "",
                         }
                         search_response.append(search_result)
                         results_processed += 1
+
+
         except Exception as e:
             print(f"Error: {e}. Failed fetching sources. Resulting in empty response.")
+            logger.info(f"Error: {e}. Failed fetching sources. Resulting in empty response.")
             search_response = []
 
         return search_response
