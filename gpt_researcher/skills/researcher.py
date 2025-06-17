@@ -597,6 +597,8 @@ class ResearchConductor:
             puchu = []
             print(puchu)
 
+            ## 测试 44444
+            print("*********************")
 
 
             # 按得分排序
