@@ -1630,7 +1630,8 @@ class ResearchConductor:
             # 确保月份在有效范围（1-12）
             month = int(digits_m)
             if 1 <= month <= 12:
-                return f"{year_full}.{month:02d}"  # 直接格式化字符串
+                # return f"{year_full}.{month:02d}"  # 直接格式化字符串
+                return f"{year_full}"
             else:
                 return f"{year_full}"  # 无效月份，只发年份
         except ValueError:
